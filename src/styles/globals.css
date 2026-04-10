@@ -80,7 +80,12 @@
   }
 
   .piece-hover {
-    transition: all 0.2s ease-out;
+    transition: filter 0.2s ease-out, transform 0.2s ease-out;
+    /* Fix SVG transform-origin: without these two lines, scale() pivots from
+       the SVG coordinate-system origin (0,0) instead of the element centre,
+       causing the piece to jump under the cursor and flicker. */
+    transform-box: fill-box;
+    transform-origin: center;
   }
 
   .piece-hover:hover {

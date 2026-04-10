@@ -132,7 +132,7 @@ export const FullscreenBoard: React.FC<FullscreenBoardProps> = ({
               <div className="text-center">
                 <div className="text-xs text-gray-500 mb-1">Goats Left</div>
                 <div className="text-sm font-semibold text-green-600">
-                  {gameState.goatsToPlace} remaining
+                  {gameState.goatsRemaining} remaining
                 </div>
               </div>
             )}
