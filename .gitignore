@@ -24,6 +24,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Local AI/assistant settings
+.claude/
+
 # Environment variables
 .env
 .env.local
@@ -33,6 +36,10 @@ dist-ssr
 # Build outputs
 build
 out
+*.tsbuildinfo
+.vite
+.cache
+.eslintcache
 
 # Test coverage
 coverage
