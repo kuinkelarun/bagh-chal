@@ -36,13 +36,8 @@ export function useAIWorker(): UseAIWorkerResult {
   const resolveRef = useRef<((move: Move) => void) | null>(null);
   const rejectRef = useRef<((error: Error) => void) | null>(null);
 
-  // Initialize worker (commented out for now - will enable after testing)
+  // Initialize worker when available
   useEffect(() => {
-    // Note: Web Workers with Vite require special setup
-    // For now, we'll use synchronous AI computation
-    // TODO: Enable worker after proper Vite configuration
-
-    /*
     if (typeof Worker !== 'undefined') {
       try {
         workerRef.current = new Worker(
@@ -87,9 +82,9 @@ export function useAIWorker(): UseAIWorkerResult {
     return () => {
       if (workerRef.current) {
         workerRef.current.terminate();
+        workerRef.current = null;
       }
     };
-    */
   }, []);
 
   const computeMove = useCallback(
@@ -102,12 +97,25 @@ export function useAIWorker(): UseAIWorkerResult {
       setError(null);
       setThinkingTime(null);
 
-      // For now, use synchronous computation
-      // TODO: Use worker when properly configured
+      // Prefer worker computation for minimax levels (1-4)
+      if (workerRef.current && difficulty <= 4) {
+        return new Promise<Move>((resolve, reject) => {
+          resolveRef.current = resolve;
+          rejectRef.current = reject;
+
+          workerRef.current!.postMessage({
+            type: 'compute-move',
+            gameState,
+            playerType,
+            difficulty,
+          });
+        });
+      }
+
+      // Fallback: synchronous computation
       try {
         const startTime = Date.now();
 
-        // Import AI dynamically to avoid circular dependencies
         const { AIFactory } = await import('@/ai/AIFactory');
         const aiEngine = AIFactory.createFromLevel(difficulty);
         const move = await aiEngine.getMove(gameState, playerType);
@@ -122,26 +130,6 @@ export function useAIWorker(): UseAIWorkerResult {
         setIsComputing(false);
         throw err;
       }
-
-      /*
-      // Worker-based computation (enable after configuration)
-      if (workerRef.current) {
-        return new Promise<Move>((resolve, reject) => {
-          resolveRef.current = resolve;
-          rejectRef.current = reject;
-
-          workerRef.current!.postMessage({
-            type: 'compute-move',
-            gameState,
-            playerType,
-            difficulty,
-          });
-        });
-      } else {
-        // Fallback to synchronous computation
-        // ... (same as above)
-      }
-      */
     },
     []
   );

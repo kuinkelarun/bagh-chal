@@ -16,6 +16,7 @@ import RulesModal from '../Tutorial/RulesModal';
 import WelcomeModal from '../Tutorial/WelcomeModal';
 import { GameStatisticsTracker, GameRecord, MoveRecord } from '@/utils/gameStatistics';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
+import { useAIWorker } from '@/hooks/useAIWorker';
 import { playMoveSound, playCaptureSound, playWinSound } from '@/utils/sounds';
 
 type GameMode = 'human-vs-human' | 'human-vs-ai' | 'ai-vs-human';
@@ -32,6 +33,7 @@ const GameContainer: React.FC = () => {
   const [aiDifficulty, setAiDifficulty] = useState<number>(2); // Default to Medium
   const [aiEngine, setAiEngine] = useState<AIEngine | null>(null);
   const [isAIThinking, setIsAIThinking] = useState(false);
+  const { computeMove } = useAIWorker();
 
   // Game tracking
   const [gameStartTime, setGameStartTime] = useState<number>(Date.now());
@@ -147,7 +149,7 @@ const GameContainer: React.FC = () => {
       // Brief delay for UX (let user see the thinking indicator)
       await new Promise((resolve) => setTimeout(resolve, 150));
 
-      const move = await aiEngine.getMove(gameState, gameState.currentPlayer);
+      const move = await computeMove(gameState, gameState.currentPlayer, aiDifficulty);
 
       // Make the move
       const success = game.makeMove(move);
@@ -421,6 +423,7 @@ const GameContainer: React.FC = () => {
               highlightedPositions={highlightedPositions}
               selectedPosition={selectedPosition}
               lastMove={lastMove}
+              suppressMoveAnimation={isAIThinking}
             />
           </div>
         </div>
@@ -517,6 +520,7 @@ const GameContainer: React.FC = () => {
           highlightedPositions={highlightedPositions}
           selectedPosition={selectedPosition}
           lastMove={lastMove}
+          suppressMoveAnimation={isAIThinking}
           gameState={gameState}
           onClose={() => setIsFullscreen(false)}
         />

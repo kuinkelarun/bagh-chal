@@ -8,6 +8,7 @@ interface FullscreenBoardProps {
   highlightedPositions: Position[];
   selectedPosition: Position | null;
   lastMove: Move | null;
+  suppressMoveAnimation?: boolean;
   gameState: GameState;
   onClose: () => void;
 }
@@ -18,6 +19,7 @@ export const FullscreenBoard: React.FC<FullscreenBoardProps> = ({
   highlightedPositions,
   selectedPosition,
   lastMove,
+  suppressMoveAnimation = false,
   gameState,
   onClose,
 }) => {
@@ -169,6 +171,7 @@ export const FullscreenBoard: React.FC<FullscreenBoardProps> = ({
               highlightedPositions={highlightedPositions}
               selectedPosition={selectedPosition}
               lastMove={lastMove}
+              suppressMoveAnimation={suppressMoveAnimation}
             />
           </div>
         </div>

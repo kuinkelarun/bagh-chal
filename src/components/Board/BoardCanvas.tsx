@@ -8,6 +8,7 @@ interface BoardCanvasProps {
   highlightedPositions?: Position[];
   selectedPosition?: Position | null;
   lastMove?: Move | null;
+  suppressMoveAnimation?: boolean;
 }
 
 const BoardCanvas: React.FC<BoardCanvasProps> = ({
@@ -16,11 +17,24 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
   highlightedPositions = [],
   selectedPosition = null,
   lastMove = null,
+  suppressMoveAnimation = false,
 }) => {
   const [showMoveAnimation, setShowMoveAnimation] = useState(false);
 
+  // Immediately clear any active move animation while AI is thinking.
+  useEffect(() => {
+    if (suppressMoveAnimation && showMoveAnimation) {
+      setShowMoveAnimation(false);
+    }
+  }, [suppressMoveAnimation, showMoveAnimation]);
+
   // Trigger animation when lastMove changes
   useEffect(() => {
+    if (suppressMoveAnimation) {
+      setShowMoveAnimation(false);
+      return;
+    }
+
     if (lastMove && lastMove.from) {
       setShowMoveAnimation(true);
       const timer = setTimeout(() => {
@@ -28,7 +42,7 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
       }, 400); // Animation duration
       return () => clearTimeout(timer);
     }
-  }, [lastMove]);
+  }, [lastMove, suppressMoveAnimation]);
   const boardSize = 400; // Base size in pixels
   const padding = 40;
   const viewBoxSize = boardSize + padding * 2;
