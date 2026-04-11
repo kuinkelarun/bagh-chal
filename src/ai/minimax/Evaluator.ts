@@ -26,11 +26,11 @@ export class Evaluator {
     ISOLATED_GOAT_PENALTY: -30,
     GOAT_MOBILITY: 12,
     GOAT_THREAT_ANTICIPATION: -20,
-    TIGER_ADJACENCY_BLOCK: 15,
+    TIGER_ADJACENCY_BLOCK: 35,
     UNSAFE_BLOCKER_PENALTY: -30,
     PLACEMENT_TIGER_ADJACENT_PENALTY: -25,
     EDGE_SAFETY: 8,
-    ENCLOSURE_SCALE: 120,
+    ENCLOSURE_SCALE: 200,
     CAPTURE_ONLY_TIGER: 200,
     SACRIFICE_BAIT: 25,
   };
@@ -48,11 +48,14 @@ export class Evaluator {
     }
   }
 
-  // Per-tiger confinement bonus for the most-confined individual tiger
-  private static mostConfinedTigerBonus(minMobility: number): number {
-    if (minMobility <= 0) return 0; // already handled by 100000 check
-    if (minMobility === 1) return 800;
-    if (minMobility === 2) return 300;
+  // Per-tiger confinement bonus — summed across ALL tigers, not just the min.
+  // This ensures the AI values confining every tiger, not just focusing on one.
+  private static perTigerConfinement(mobility: number): number {
+    if (mobility <= 0) return 0; // fully blocked → handled by 100000 check
+    if (mobility === 1) return 800;
+    if (mobility === 2) return 400;
+    if (mobility === 3) return 150;
+    if (mobility === 4) return 50;
     return 0;
   }
 
@@ -165,16 +168,14 @@ export class Evaluator {
       // Tiered near-win urgency (replaces linear formula)
       score += this.tigerMobilityScore(tigerMobility);
 
-      // Per-tiger confinement: bonus for the most-caged individual tiger
-      let minTigerMobility = Infinity;
+      // Per-tiger confinement: sum across ALL tigers (not just the minimum)
       let captureOnlyTigers = 0;
       for (const tigerPos of tigers) {
         const { plain, captures } = this.countTigerMoveTypes(board, tigerPos);
         const m = plain + captures;
-        if (m < minTigerMobility) minTigerMobility = m;
+        score += this.perTigerConfinement(m);
         if (m > 0 && plain === 0) captureOnlyTigers++; // can only escape by eating
       }
-      score += this.mostConfinedTigerBonus(minTigerMobility);
       score += captureOnlyTigers * this.WEIGHTS.CAPTURE_ONLY_TIGER;
 
       // Goat mobility matters more in movement phase
@@ -193,6 +194,50 @@ export class Evaluator {
         const goatNeighbors = neighbors.filter(n => board.getPiece(n) === PieceType.GOAT).length;
         const ratio = goatNeighbors / neighbors.length;
         score += ratio * ratio * this.WEIGHTS.ENCLOSURE_SCALE;
+      }
+
+      // Escape route sealing: reward goats positioned to fill empty tiger exits
+      for (const tigerPos of tigers) {
+        const neighbors = board.getNeighbors(tigerPos);
+        const emptyExits = neighbors.filter(n => board.isEmpty(n));
+        if (emptyExits.length === 0) continue; // fully blocked already
+
+        // Urgency: fewer exits → more important to seal them
+        const urgency = emptyExits.length <= 1 ? 4 : emptyExits.length <= 2 ? 2.5 : 1;
+
+        for (const exit of emptyExits) {
+          const exitNeighbors = board.getNeighbors(exit);
+          const goatsReady = exitNeighbors.filter(n => board.getPiece(n) === PieceType.GOAT).length;
+          if (goatsReady > 0) {
+            // A goat can move to seal this exit next turn
+            score += Math.min(goatsReady, 2) * 15 * urgency;
+          }
+        }
+      }
+
+      // Strategic multi-tiger intersections: empty squares adjacent to 2+ tigers
+      // are high-value positions — occupying them blocks multiple tigers at once
+      for (let r = 0; r < 5; r++) {
+        for (let c = 0; c < 5; c++) {
+          const pos = { row: r, col: c };
+          if (board.getPiece(pos) !== PieceType.EMPTY) continue;
+
+          let adjTigerCount = 0;
+          for (const t of tigers) {
+            if (board.areAdjacent(t, pos)) adjTigerCount++;
+          }
+
+          if (adjTigerCount >= 2) {
+            score += adjTigerCount * 35;
+
+            // Extra bonus if a goat can reach this square next move
+            const posNeighbors = board.getNeighbors(pos);
+            const reachableGoats = posNeighbors.filter(n => board.getPiece(n) === PieceType.GOAT).length;
+            if (reachableGoats > 0) {
+              score += 20 * adjTigerCount;
+            }
+          }
+        }
       }
     }
 
@@ -603,7 +648,7 @@ export class Evaluator {
    * Used for move ordering in alpha-beta pruning
    */
   public static quickEvaluate(gameState: GameState, player: PlayerType): number {
-    // Simple material count
+    // Fast heuristic for move ordering (alpha-beta pruning efficiency)
     let score = 0;
 
     if (player === PlayerType.TIGER) {
@@ -612,6 +657,20 @@ export class Evaluator {
     } else {
       score = (20 - gameState.goatsCaptured) * 50;
       if (gameState.goatsCaptured >= 5) return -100000;
+
+      // In movement phase, factor in tiger confinement for better move ordering
+      if (gameState.phase === GamePhase.MOVEMENT) {
+        const board = new Board();
+        board.fromArray(gameState.board);
+        const tigerMobility = Rules.countValidMoves(
+          board,
+          PlayerType.TIGER,
+          gameState.phase,
+          gameState.goatsRemaining
+        );
+        if (tigerMobility === 0) return 100000;
+        score += (20 - tigerMobility) * 30;
+      }
     }
 
     return score;
