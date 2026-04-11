@@ -439,7 +439,8 @@ export class MinimaxEngine implements AIEngine {
 
   /**
    * In goat placement phase, if a goat is under direct capture threat,
-   * prioritize placements that block immediate capture lanes.
+   * prioritize placements that block immediate capture lanes while still
+   * considering safer non-block alternatives when all block options are weak.
    */
   private prioritizeEmergencyGoatPlacements(
     validMoves: ValidMove[],
@@ -462,69 +463,77 @@ export class MinimaxEngine implements AIEngine {
       criticalBlockSquares.add(`${threat.landing.row},${threat.landing.col}`);
     }
 
-    const blockingMoves = validMoves.filter((vm) =>
-      criticalBlockSquares.has(`${vm.move.to.row},${vm.move.to.col}`)
-    );
+    const lastMove = gameState.moveHistory.length > 0
+      ? gameState.moveHistory[gameState.moveHistory.length - 1]
+      : null;
 
-    if (blockingMoves.length > 0) {
-      const lastMove = gameState.moveHistory.length > 0
-        ? gameState.moveHistory[gameState.moveHistory.length - 1]
-        : null;
+    // Score ALL legal placements: emergency-save impact + safety.
+    const scoredAll = validMoves.map((vm) => {
+      const to = vm.move.to;
+      const isDirectBlock = criticalBlockSquares.has(`${to.row},${to.col}`);
+      const isLastCapturedSquare =
+        !!lastMove?.captured &&
+        lastMove.captured.row === to.row &&
+        lastMove.captured.col === to.col;
 
-      const scored = blockingMoves.map((vm) => {
-        const to = vm.move.to;
+      board.setPiece(to, PieceType.GOAT);
 
-        // Simulate this placement to evaluate safety + impact.
-        board.setPiece(to, PieceType.GOAT);
+      const afterThreats = this.collectImmediateCaptureThreats(board);
+      const blockedThreatCount = baselineThreats.length - afterThreats.length;
+      const placedGoatThreatened = this.isGoatImmediatelyCapturable(board, to);
+      const adjacentTigers = this.countAdjacentTigers(board, to);
 
-        const afterThreats = this.collectImmediateCaptureThreats(board);
-        const blockedThreatCount = baselineThreats.length - afterThreats.length;
-        const placedGoatThreatened = this.isGoatImmediatelyCapturable(board, to);
-        const adjacentTigers = this.countAdjacentTigers(board, to);
+      board.setPiece(to, PieceType.EMPTY);
 
-        board.setPiece(to, PieceType.EMPTY);
+      // Avoid repeating the exact square that was just captured unless unavoidable.
+      const repeatCapturePenalty = isLastCapturedSquare ? 180 : 0;
 
-        // Avoid repeating the exact square that was just captured unless unavoidable.
-        const repeatCapturePenalty =
-          lastMove?.captured &&
-          lastMove.captured.row === to.row &&
-          lastMove.captured.col === to.col
-            ? 180
-            : 0;
+      const score =
+        blockedThreatCount * 1000 +
+        (isDirectBlock ? 120 : 0) -
+        afterThreats.length * 120 -
+        (placedGoatThreatened ? 500 : 0) -
+        adjacentTigers * 40 -
+        repeatCapturePenalty;
 
-        const score =
-          blockedThreatCount * 1000 -
-          afterThreats.length * 70 -
-          (placedGoatThreatened ? 500 : 0) -
-          adjacentTigers * 40 -
-          repeatCapturePenalty;
+      return {
+        vm,
+        score,
+        blockedThreatCount,
+        placedGoatThreatened,
+        isLastCapturedSquare,
+      };
+    });
 
-        return {
-          vm,
-          score,
-          blockedThreatCount,
-          placedGoatThreatened,
-        };
-      });
-
-      // Prefer safe block placements when available.
-      const safeBlocks = scored.filter((s) => s.blockedThreatCount > 0 && !s.placedGoatThreatened);
-      const pool = safeBlocks.length > 0 ? safeBlocks : scored;
-
-      const bestScore = Math.max(...pool.map((s) => s.score));
-      const bestMoves = pool.filter((s) => s.score === bestScore).map((s) => s.vm);
-
-      if (bestMoves.length > 0) {
-        console.log(
-          `Emergency goat placement: ${blockingMoves.length} block options, ${bestMoves.length} best-safe options selected`
-        );
-        return bestMoves;
-      }
-
-      return blockingMoves;
+    // Hard guard: never place on the last-captured square unless that square
+    // is the ONLY move that reduces immediate threat count.
+    let candidatePool = scoredAll;
+    const threatReducers = scoredAll.filter((s) => s.blockedThreatCount > 0);
+    const nonRepeatThreatReducers = threatReducers.filter((s) => !s.isLastCapturedSquare);
+    if (threatReducers.length > 0 && nonRepeatThreatReducers.length > 0) {
+      candidatePool = scoredAll.filter((s) => !s.isLastCapturedSquare);
     }
 
-    return validMoves;
+    // Critical case: if we're close to losing, force dominant safe saves.
+    const maxBlocked = Math.max(...candidatePool.map((s) => s.blockedThreatCount));
+    const dominantSafeSaves = candidatePool.filter(
+      (s) => s.blockedThreatCount === maxBlocked && maxBlocked > 0 && !s.placedGoatThreatened
+    );
+
+    if (
+      dominantSafeSaves.length > 0 &&
+      (gameState.goatsCaptured >= 4 || maxBlocked >= 2)
+    ) {
+      console.log(
+        `Emergency goat placement: forcing ${dominantSafeSaves.length} dominant safe save moves`
+      );
+      return dominantSafeSaves.map((s) => s.vm);
+    }
+
+    // Normal emergency case: keep all moves, but sort by emergency+safe score.
+    candidatePool.sort((a, b) => b.score - a.score);
+    console.log(`Emergency goat placement: scoring ${candidatePool.length} legal placements`);
+    return candidatePool.map((s) => s.vm);
   }
 
   /**
