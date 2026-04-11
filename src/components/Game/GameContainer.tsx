@@ -9,7 +9,6 @@ import FullscreenBoard from '../Board/FullscreenBoard';
 import GameInfo from './GameInfo';
 import GameToolbar from './GameToolbar';
 import MoveHistory from './MoveHistory';
-import AIThinking from '../AI/AIThinking';
 import MoveAnalysis from '../AI/MoveAnalysis';
 import GameStatistics from './GameStatistics';
 import RulesModal from '../Tutorial/RulesModal';
@@ -42,6 +41,7 @@ const GameContainer: React.FC = () => {
   // UI state
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [isStatsOpen, setIsStatsOpen] = useState(false);
+  const [isModePickerOpen, setIsModePickerOpen] = useState(true);
   const [isWelcomeModalOpen, setIsWelcomeModalOpen] = useState(() => {
     const hasVisited = localStorage.getItem('baghchal_has_visited');
     return !hasVisited;
@@ -75,7 +75,7 @@ const GameContainer: React.FC = () => {
     },
     onNewGame: () => {
       if (gameState.status !== GameStatus.IN_PROGRESS) {
-        handleNewGame();
+        setIsModePickerOpen(true);
       }
     },
     onShowRules: () => {
@@ -327,10 +327,44 @@ const GameContainer: React.FC = () => {
     updateGameState();
   };
 
+  const startNewGameWithMode = (mode: GameMode) => {
+    setGameMode(mode);
+    handleNewGame();
+    setIsModePickerOpen(false);
+  };
+
+  const handleRequestNewGame = () => {
+    setIsModePickerOpen(true);
+  };
+
   // Handle undo
   const handleUndo = () => {
-    const success = game.undoMove();
-    if (success) {
+    if (isAIThinking || gameState.moveHistory.length === 0) return;
+
+    let undoneCount = 0;
+
+    if (gameMode === 'human-vs-human') {
+      if (game.undoMove()) {
+        undoneCount = 1;
+      }
+    } else {
+      // In AI modes, undo back to the previous human decision point:
+      // usually this means undo AI move + human move.
+      const humanPlayer = gameMode === 'human-vs-ai' ? PlayerType.GOAT : PlayerType.TIGER;
+
+      while (game.getState().moveHistory.length > 0) {
+        const success = game.undoMove();
+        if (!success) break;
+        undoneCount++;
+
+        if (game.getCurrentPlayer() === humanPlayer) {
+          break;
+        }
+      }
+    }
+
+    if (undoneCount > 0) {
+      setMoveRecords((prev) => prev.slice(0, Math.max(0, prev.length - undoneCount)));
       setSelectedPosition(null);
       setHighlightedPositions([]);
       setLastMove(null);
@@ -365,8 +399,7 @@ const GameContainer: React.FC = () => {
 
   // Handle game mode change
   const handleGameModeChange = (mode: GameMode) => {
-    setGameMode(mode);
-    handleNewGame();
+    startNewGameWithMode(mode);
   };
 
   return (
@@ -378,26 +411,20 @@ const GameContainer: React.FC = () => {
         onGameModeChange={handleGameModeChange}
         aiDifficulty={aiDifficulty}
         onDifficultyChange={setAiDifficulty}
-        onNewGame={handleNewGame}
+        onNewGame={handleRequestNewGame}
         onUndo={handleUndo}
         onOpenRules={() => setIsRulesModalOpen(true)}
         onOpenStats={() => setIsStatsOpen(true)}
-        canUndo={gameState.moveHistory.length > 0}
+        canUndo={!isAIThinking && gameState.moveHistory.length > 0 && !isCurrentPlayerAI()}
         gameStatus={gameState.status}
         isAIThinking={isAIThinking}
       />
 
       {/* ── Instructions / AI thinking indicator ── */}
       <div className="mb-3 min-h-[2.5rem] flex items-center justify-center">
-        {isAIThinking ? (
-          <AIThinking
-            playerType={gameState.currentPlayer === PlayerType.TIGER ? 'tiger' : 'goat'}
-          />
-        ) : (
-          <p className="text-sm md:text-base text-gray-600 font-medium text-center">
-            {getInstructions()}
-          </p>
-        )}
+        <p className="text-sm md:text-base text-gray-600 font-medium text-center">
+          {getInstructions()}
+        </p>
       </div>
 
       {/* ── Main game grid ── */}
@@ -406,6 +433,24 @@ const GameContainer: React.FC = () => {
         {/* Board — 2 columns on lg */}
         <div className="lg:col-span-2">
           <div className="bg-white rounded-lg shadow-lg p-4 md:p-6 relative">
+            {isAIThinking && (
+              <div className="absolute top-4 left-4 z-10 pointer-events-none">
+                <div
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border shadow-sm backdrop-blur-sm text-xs font-semibold ${
+                    gameState.currentPlayer === PlayerType.TIGER
+                      ? 'bg-orange-50/95 border-orange-200 text-orange-700'
+                      : 'bg-green-50/95 border-green-200 text-green-700'
+                  }`}
+                >
+                  <span
+                    className={`w-2 h-2 rounded-full animate-pulse ${
+                      gameState.currentPlayer === PlayerType.TIGER ? 'bg-orange-500' : 'bg-green-500'
+                    }`}
+                  />
+                  <span>AI thinking</span>
+                </div>
+              </div>
+            )}
             <button
               onClick={() => setIsFullscreen(true)}
               className="absolute top-4 right-4 z-10 w-10 h-10 bg-white/80 hover:bg-gradient-to-r hover:from-orange-500 hover:to-amber-500 text-gray-600 hover:text-white rounded-lg shadow-md transition-all duration-200 transform hover:scale-110 flex items-center justify-center"
@@ -450,7 +495,7 @@ const GameContainer: React.FC = () => {
       {/* ── Modals ── */}
 
       <WelcomeModal
-        isOpen={isWelcomeModalOpen}
+        isOpen={isWelcomeModalOpen && !isModePickerOpen}
         onClose={handleWelcomeClose}
         onShowRules={handleWelcomeShowRules}
       />
@@ -503,11 +548,54 @@ const GameContainer: React.FC = () => {
                 : 'All tigers are blocked!'}
             </p>
             <button
-              onClick={handleNewGame}
+              onClick={handleRequestNewGame}
               className="bg-gradient-to-r from-orange-500 to-amber-500 text-white px-8 py-3 rounded-lg font-semibold hover:from-orange-600 hover:to-amber-600 transition-all transform hover:scale-105"
             >
               Play Again
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Game mode picker modal (shown on reload and before every new game) */}
+      {isModePickerOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Choose game mode"
+        >
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6 md:p-7">
+            <h2 className="text-2xl font-bold text-gray-800 mb-2">🎮 Choose Game Mode</h2>
+            <p className="text-sm text-gray-600 mb-5">
+              Pick who you want to play as for this new game.
+            </p>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => startNewGameWithMode('human-vs-human')}
+                className="w-full text-left p-4 rounded-lg border-2 border-gray-200 hover:border-orange-300 bg-white transition-all"
+              >
+                <div className="font-semibold text-gray-800">👤 vs 👤 Human vs Human</div>
+                <div className="text-xs text-gray-600 mt-1">Two players on the same device</div>
+              </button>
+
+              <button
+                onClick={() => startNewGameWithMode('human-vs-ai')}
+                className="w-full text-left p-4 rounded-lg border-2 border-gray-200 hover:border-orange-300 bg-white transition-all"
+              >
+                <div className="font-semibold text-gray-800">🐐 You as Goats vs 🤖 AI Tigers</div>
+                <div className="text-xs text-gray-600 mt-1">Defend and trap the tigers</div>
+              </button>
+
+              <button
+                onClick={() => startNewGameWithMode('ai-vs-human')}
+                className="w-full text-left p-4 rounded-lg border-2 border-gray-200 hover:border-orange-300 bg-white transition-all"
+              >
+                <div className="font-semibold text-gray-800">🐅 You as Tigers vs 🤖 AI Goats</div>
+                <div className="text-xs text-gray-600 mt-1">Hunt goats before getting blocked</div>
+              </button>
+            </div>
           </div>
         </div>
       )}
