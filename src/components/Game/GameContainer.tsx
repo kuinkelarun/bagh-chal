@@ -116,6 +116,33 @@ const GameContainer: React.FC = () => {
 
     setIsAIThinking(true);
 
+    const pickFallbackMove = (validMoves: Array<{ move: Move; isCapture: boolean }>): Move | null => {
+      if (validMoves.length === 0) return null;
+
+      // Prefer captures when no evaluator is available
+      if (!aiEngine.evaluate) {
+        const capture = validMoves.find((vm) => vm.isCapture);
+        return capture ? capture.move : validMoves[0].move;
+      }
+
+      let bestMove = validMoves[0].move;
+      let bestEval = -Infinity;
+
+      for (const vm of validMoves) {
+        const simGame = game.clone();
+        const success = simGame.makeMove(vm.move);
+        if (!success) continue;
+
+        const evalScore = aiEngine.evaluate(simGame.getState(), gameState.currentPlayer);
+        if (evalScore > bestEval) {
+          bestEval = evalScore;
+          bestMove = vm.move;
+        }
+      }
+
+      return bestMove;
+    };
+
     try {
       // Brief delay for UX (let user see the thinking indicator)
       await new Promise((resolve) => setTimeout(resolve, 150));
@@ -131,14 +158,15 @@ const GameContainer: React.FC = () => {
         setHighlightedPositions([]);
         updateGameState();
       } else {
-        // If AI returned invalid move, use any valid move as fallback
+        // If AI returned invalid move, use a scored fallback
         console.error('AI returned invalid move, using fallback', move);
         const validMoves = game.getValidMoves();
-        if (validMoves.length > 0) {
-          const fallbackSuccess = game.makeMove(validMoves[0].move);
+        const fallbackMove = pickFallbackMove(validMoves);
+        if (fallbackMove) {
+          const fallbackSuccess = game.makeMove(fallbackMove);
           if (fallbackSuccess) {
             playMoveSound();
-            setLastMove(validMoves[0].move);
+            setLastMove(fallbackMove);
             setSelectedPosition(null);
             setHighlightedPositions([]);
             updateGameState();
@@ -151,9 +179,10 @@ const GameContainer: React.FC = () => {
       console.error('AI move error:', error);
       try {
         const validMoves = game.getValidMoves();
-        if (validMoves.length > 0) {
-          game.makeMove(validMoves[0].move);
-          setLastMove(validMoves[0].move);
+        const fallbackMove = pickFallbackMove(validMoves);
+        if (fallbackMove) {
+          game.makeMove(fallbackMove);
+          setLastMove(fallbackMove);
           updateGameState();
         }
       } catch (fallbackError) {

@@ -15,6 +15,7 @@ import {
   Position,
   PlayerType,
   ValidMove,
+  GamePhase,
   PieceType,
 } from '@/core/types';
 
@@ -78,12 +79,11 @@ export class MinimaxEngine implements AIEngine {
     const moveEvals = this.searchAllMoves(gameState, maxDepth, playerType);
 
     if (moveEvals.size === 0) {
-      // Fallback: get any valid move
-      const game = new Game();
-      game.loadState(gameState);
-      const validMoves = game.getValidMoves();
-      if (validMoves.length > 0) {
-        return validMoves[0].move;
+      // Fallback: choose a scored move instead of arbitrary first-valid
+      const fallback = this.pickScoredFallbackMove(gameState, playerType);
+      if (fallback) {
+        console.warn('Search returned no evaluations, using scored fallback move');
+        return fallback;
       }
       throw new Error('No valid moves available');
     }
@@ -108,6 +108,7 @@ export class MinimaxEngine implements AIEngine {
     const game = new Game();
     game.loadState(gameState);
     const validMoves = game.getValidMoves();
+    const candidateMoves = this.prioritizeEmergencyGoatPlacements(validMoves, gameState, playerType);
 
     const moveEvals = new Map<string, { evaluation: number; isCapture: boolean; move: Move }>();
 
@@ -115,7 +116,7 @@ export class MinimaxEngine implements AIEngine {
     for (let depth = 1; depth <= maxDepth; depth++) {
       if (this.shouldStop || this.isTimeUp()) break;
 
-      for (const vm of validMoves) {
+      for (const vm of candidateMoves) {
         if (this.shouldStop || this.isTimeUp()) break;
 
         const newGame = game.clone();
@@ -331,6 +332,19 @@ export class MinimaxEngine implements AIEngine {
     gameState: GameState,
     player: PlayerType
   ): ValidMove[] {
+    const game = new Game();
+    game.loadState(gameState);
+
+    const scoreMove = (vm: ValidMove): number => {
+      if (vm.evaluation !== undefined) {
+        return vm.evaluation;
+      }
+
+      const newGame = game.clone();
+      newGame.makeMove(vm.move);
+      return Evaluator.quickEvaluate(newGame.getState(), player);
+    };
+
     // Sort moves: captures first, then by quick evaluation
     return validMoves.sort((a, b) => {
       // Captures first
@@ -338,11 +352,7 @@ export class MinimaxEngine implements AIEngine {
       if (!a.isCapture && b.isCapture) return 1;
 
       // Then by quick eval
-      if (a.evaluation !== undefined && b.evaluation !== undefined) {
-        return b.evaluation - a.evaluation;
-      }
-
-      return 0;
+      return scoreMove(b) - scoreMove(a);
     });
   }
 
@@ -375,8 +385,15 @@ export class MinimaxEngine implements AIEngine {
 
     if (playerType === PlayerType.TIGER) {
       const tigers = board.getPiecesOfType(PieceType.TIGER);
-      return openingBook.getTigerOpening(tigers);
+      return openingBook.getTigerOpening(tigers, this.config.randomness === 0);
     } else {
+      // If goats are currently under direct capture threat, bypass opening book
+      // and let full minimax decide a protective placement.
+      if (this.hasImmediateGoatThreat(board)) {
+        console.log('Bypassing goat opening book due to immediate threat');
+        return null;
+      }
+
       // Goat opening
       const occupied = new Set<string>();
       for (let row = 0; row < 5; row++) {
@@ -386,8 +403,118 @@ export class MinimaxEngine implements AIEngine {
           }
         }
       }
-      return openingBook.getGoatOpening(gameState.turnNumber, occupied, gameState.board);
+      return openingBook.getGoatOpening(
+        gameState.turnNumber,
+        occupied,
+        gameState.board,
+        this.config.randomness === 0
+      );
     }
+  }
+
+  /**
+   * Choose a deterministic scored fallback move if search produced no evaluations.
+   */
+  private pickScoredFallbackMove(gameState: GameState, playerType: PlayerType): Move | null {
+    const game = new Game();
+    game.loadState(gameState);
+    const validMoves = game.getValidMoves();
+    if (validMoves.length === 0) return null;
+
+    let bestMove = validMoves[0].move;
+    let bestEval = -Infinity;
+
+    for (const vm of validMoves) {
+      const sim = game.clone();
+      sim.makeMove(vm.move);
+      const evalScore = Evaluator.evaluate(sim.getState(), playerType);
+      if (evalScore > bestEval) {
+        bestEval = evalScore;
+        bestMove = vm.move;
+      }
+    }
+
+    return bestMove;
+  }
+
+  /**
+   * In goat placement phase, if a goat is under direct capture threat,
+   * prioritize placements that block immediate capture lanes.
+   */
+  private prioritizeEmergencyGoatPlacements(
+    validMoves: ValidMove[],
+    gameState: GameState,
+    playerType: PlayerType
+  ): ValidMove[] {
+    if (playerType !== PlayerType.GOAT || gameState.phase !== GamePhase.PLACEMENT) {
+      return validMoves;
+    }
+
+    const board = new Board();
+    board.fromArray(gameState.board);
+    const criticalBlockSquares = this.getImmediateGoatBlockSquares(board);
+
+    if (criticalBlockSquares.size === 0) {
+      return validMoves;
+    }
+
+    const blockingMoves = validMoves.filter((vm) =>
+      criticalBlockSquares.has(`${vm.move.to.row},${vm.move.to.col}`)
+    );
+
+    if (blockingMoves.length > 0) {
+      console.log(`Emergency goat placement: prioritizing ${blockingMoves.length} block moves`);
+      return blockingMoves;
+    }
+
+    return validMoves;
+  }
+
+  /**
+   * True if at least one goat can be captured immediately by any tiger.
+   */
+  private hasImmediateGoatThreat(board: Board): boolean {
+    return this.getImmediateGoatBlockSquares(board).size > 0;
+  }
+
+  /**
+   * Squares where placing a goat immediately blocks a tiger capture lane.
+   */
+  private getImmediateGoatBlockSquares(board: Board): Set<string> {
+    const blockSquares = new Set<string>();
+    const tigers = board.getPiecesOfType(PieceType.TIGER);
+
+    for (const tigerPos of tigers) {
+      const neighbors = board.getNeighbors(tigerPos);
+      for (const goatPos of neighbors) {
+        if (board.getPiece(goatPos) !== PieceType.GOAT) continue;
+        if (this.isCorner(goatPos)) continue;
+
+        const rowDiff = goatPos.row - tigerPos.row;
+        const colDiff = goatPos.col - tigerPos.col;
+        const landing: Position = {
+          row: goatPos.row + rowDiff,
+          col: goatPos.col + colDiff,
+        };
+
+        if (
+          board.isValidPosition(landing) &&
+          board.isEmpty(landing) &&
+          board.areAdjacent(goatPos, landing)
+        ) {
+          blockSquares.add(`${landing.row},${landing.col}`);
+        }
+      }
+    }
+
+    return blockSquares;
+  }
+
+  /**
+   * Check if position is a corner.
+   */
+  private isCorner(pos: Position): boolean {
+    return (pos.row === 0 || pos.row === 4) && (pos.col === 0 || pos.col === 4);
   }
 
   /**
@@ -432,7 +559,7 @@ export class MinimaxEngine implements AIEngine {
 
     switch (level) {
       case 1:
-        this.config.depth = 2;
+        this.config.depth = 3;
         this.config.randomness = 0.4;
         this.config.useOpeningBook = false;
         this.maxTime = 2000;

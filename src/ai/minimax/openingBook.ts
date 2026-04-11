@@ -106,13 +106,13 @@ class OpeningBook {
   /**
    * Get opening move for tigers
    */
-  public getTigerOpening(tigerPositions: Position[]): Move | null {
+  public getTigerOpening(tigerPositions: Position[], deterministic = false): Move | null {
     // Try to find opening moves for tigers in corners
     for (const pos of tigerPositions) {
       const key = `${pos.row},${pos.col}`;
       if (this.tigerOpenings.has(key)) {
         const moves = this.tigerOpenings.get(key)!;
-        return this.selectWeightedMove(moves);
+        return this.selectWeightedMove(moves, deterministic);
       }
     }
 
@@ -125,7 +125,8 @@ class OpeningBook {
   public getGoatOpening(
     turnNumber: number,
     occupiedPositions: Set<string>,
-    boardGrid?: PieceType[][]
+    boardGrid?: PieceType[][],
+    deterministic = false
   ): Move | null {
     let phase: string;
 
@@ -158,14 +159,28 @@ class OpeningBook {
 
     if (availableMoves.length === 0) return null;
 
-    return this.selectWeightedMove(availableMoves);
+    return this.selectWeightedMove(availableMoves, deterministic);
   }
 
   /**
    * Select a move based on weights (probabilistic selection)
    */
-  private selectWeightedMove(moves: OpeningMove[]): Move | null {
+  private selectWeightedMove(moves: OpeningMove[], deterministic = false): Move | null {
     if (moves.length === 0) return null;
+
+    if (deterministic) {
+      // In deterministic mode, always choose the highest-weight opening.
+      let best = moves[0];
+      let bestWeight = best.weight || 1;
+      for (const m of moves) {
+        const w = m.weight || 1;
+        if (w > bestWeight) {
+          best = m;
+          bestWeight = w;
+        }
+      }
+      return best.move;
+    }
 
     const totalWeight = moves.reduce((sum, m) => sum + (m.weight || 1), 0);
     let random = Math.random() * totalWeight;

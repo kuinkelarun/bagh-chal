@@ -27,7 +27,8 @@ export class Evaluator {
     GOAT_MOBILITY: 12,
     GOAT_THREAT_ANTICIPATION: -20,
     TIGER_ADJACENCY_BLOCK: 15,
-    UNSAFE_BLOCKER_PENALTY: -5,
+    UNSAFE_BLOCKER_PENALTY: -30,
+    PLACEMENT_TIGER_ADJACENT_PENALTY: -25,
     EDGE_SAFETY: 8,
     ENCLOSURE_SCALE: 120,
     CAPTURE_ONLY_TIGER: 200,
@@ -229,6 +230,11 @@ export class Evaluator {
       // Edge safety — edges are harder to capture from (fewer approach vectors)
       if (this.isEdgePosition(goatPos)) {
         score += this.WEIGHTS.EDGE_SAFETY;
+      }
+
+      // During placement, avoid dropping goats adjacent to tigers unless corner-protected
+      if (isPlacement && adjacentTigers > 0 && !this.isCorner(goatPos)) {
+        score += adjacentTigers * this.WEIGHTS.PLACEMENT_TIGER_ADJACENT_PENALTY;
       }
     });
 
