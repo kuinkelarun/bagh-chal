@@ -25,7 +25,7 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
       setShowMoveAnimation(true);
       const timer = setTimeout(() => {
         setShowMoveAnimation(false);
-      }, 1000); // Animation duration
+      }, 400); // Animation duration
       return () => clearTimeout(timer);
     }
   }, [lastMove]);
@@ -47,18 +47,6 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
   // Check if position is selected
   const isSelected = (row: number, col: number) =>
     selectedPosition !== null && selectedPosition.row === row && selectedPosition.col === col;
-
-  // Check if point has diagonal connections
-  const hasDiagonals = (row: number, col: number): boolean => {
-    // Center
-    if (row === 2 && col === 2) return true;
-    // Corners
-    if ((row === 0 || row === 4) && (col === 0 || col === 4)) return true;
-    // Edge midpoints
-    if ((row === 0 || row === 4) && col === 2) return true;
-    if ((col === 0 || col === 4) && row === 2) return true;
-    return false;
-  };
 
   // Render grid lines
   const renderLines = () => {
@@ -98,54 +86,40 @@ const BoardCanvas: React.FC<BoardCanvasProps> = ({
       );
     }
 
-    // Diagonal lines
-    const diagonalPoints: Position[] = [
-      { row: 0, col: 0 },
-      { row: 0, col: 2 },
-      { row: 0, col: 4 },
-      { row: 2, col: 0 },
-      { row: 2, col: 2 },
-      { row: 2, col: 4 },
-      { row: 4, col: 0 },
-      { row: 4, col: 2 },
-      { row: 4, col: 4 },
-    ];
+    // Diagonal lines - draw both diagonals (\  and /) in every cell
+    for (let row = 0; row < BOARD_SIZE - 1; row++) {
+      for (let col = 0; col < BOARD_SIZE - 1; col++) {
+        const topLeft = toSVGCoords(row, col);
+        const topRight = toSVGCoords(row, col + 1);
+        const bottomLeft = toSVGCoords(row + 1, col);
+        const bottomRight = toSVGCoords(row + 1, col + 1);
 
-    diagonalPoints.forEach((point, idx) => {
-      if (hasDiagonals(point.row, point.col)) {
-        const center = toSVGCoords(point.row, point.col);
-
-        // Draw diagonals from this point
-        if (point.row > 0 && point.col > 0) {
-          const topLeft = toSVGCoords(point.row - 1, point.col - 1);
-          lines.push(
-            <line
-              key={`d-tl-${idx}`}
-              x1={center.x}
-              y1={center.y}
-              x2={topLeft.x}
-              y2={topLeft.y}
-              stroke="#8B4513"
-              strokeWidth="2"
-            />
-          );
-        }
-        if (point.row > 0 && point.col < BOARD_SIZE - 1) {
-          const topRight = toSVGCoords(point.row - 1, point.col + 1);
-          lines.push(
-            <line
-              key={`d-tr-${idx}`}
-              x1={center.x}
-              y1={center.y}
-              x2={topRight.x}
-              y2={topRight.y}
-              stroke="#8B4513"
-              strokeWidth="2"
-            />
-          );
-        }
+        // \ diagonal (top-left to bottom-right)
+        lines.push(
+          <line
+            key={`d-bs-${row}-${col}`}
+            x1={topLeft.x}
+            y1={topLeft.y}
+            x2={bottomRight.x}
+            y2={bottomRight.y}
+            stroke="#8B4513"
+            strokeWidth="2"
+          />
+        );
+        // / diagonal (top-right to bottom-left)
+        lines.push(
+          <line
+            key={`d-fs-${row}-${col}`}
+            x1={topRight.x}
+            y1={topRight.y}
+            x2={bottomLeft.x}
+            y2={bottomLeft.y}
+            stroke="#8B4513"
+            strokeWidth="2"
+          />
+        );
       }
-    });
+    }
 
     return lines;
   };

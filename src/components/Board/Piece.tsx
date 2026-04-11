@@ -19,11 +19,11 @@ const Piece: React.FC<PieceProps> = ({ type, x, y, onClick }) => {
   if (type === PieceType.TIGER) {
     const size = tigerSize;
     return (
+      <g transform={`translate(${x}, ${y})`}>
       <g
         onClick={onClick}
         style={{ cursor: 'pointer' }}
         className="piece-enter piece-smooth-move piece-hover"
-        transform={`translate(${x}, ${y})`}
       >
         <defs>
           {/* Tiger body gradient */}
@@ -155,17 +155,18 @@ const Piece: React.FC<PieceProps> = ({ type, x, y, onClick }) => {
           strokeLinecap="round"
         />
       </g>
+      </g>
     );
   }
 
   // Goat
   const size = goatSize;
   return (
+    <g transform={`translate(${x}, ${y})`}>
     <g
       onClick={onClick}
       style={{ cursor: 'pointer' }}
       className="piece-enter piece-smooth-move piece-hover"
-      transform={`translate(${x}, ${y})`}
     >
       <defs>
         {/* Goat body gradient */}
@@ -326,6 +327,7 @@ const Piece: React.FC<PieceProps> = ({ type, x, y, onClick }) => {
         <path d="M -12 -12 Q -10 -10, -12 -8" stroke="#8B7355" strokeWidth="0.5" fill="none" />
         <path d="M 12 -12 Q 10 -10, 12 -8" stroke="#8B7355" strokeWidth="0.5" fill="none" />
       </g>
+    </g>
     </g>
   );
 };

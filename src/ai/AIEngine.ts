@@ -63,38 +63,38 @@ export interface AIMoveResult {
  */
 export const AI_PRESETS: Record<number, AIConfig> = {
   1: {
-    // Easy
+    // Easy - shallow search, high randomness on non-capture moves
     algorithm: 'minimax',
     level: 1,
-    depth: 2,
-    timeLimit: 1000,
+    depth: 3,
+    timeLimit: 2000,
     useOpeningBook: false,
-    randomness: 0.2,
+    randomness: 0.4,
   },
   2: {
-    // Medium
+    // Medium - moderate search, some randomness
     algorithm: 'minimax',
     level: 2,
     depth: 4,
-    timeLimit: 2000,
-    useOpeningBook: true,
-    randomness: 0.1,
+    timeLimit: 5000,
+    useOpeningBook: false,
+    randomness: 0.15,
   },
   3: {
-    // Hard
+    // Hard - deep search, no randomness, uses opening book
     algorithm: 'minimax',
     level: 3,
     depth: 6,
-    timeLimit: 5000,
+    timeLimit: 10000,
     useOpeningBook: true,
-    randomness: 0.05,
+    randomness: 0,
   },
   4: {
-    // Expert
+    // Expert - very deep search, perfect play
     algorithm: 'minimax',
     level: 4,
-    depth: 8,
-    timeLimit: 10000,
+    depth: 10,
+    timeLimit: 15000,
     useOpeningBook: true,
     randomness: 0,
   },
@@ -102,8 +102,8 @@ export const AI_PRESETS: Record<number, AIConfig> = {
     // Adaptive (placeholder for ML)
     algorithm: 'adaptive',
     level: 5,
-    depth: 6,
-    timeLimit: 8000,
+    depth: 8,
+    timeLimit: 12000,
     useOpeningBook: true,
     randomness: 0,
   },

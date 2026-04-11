@@ -62,10 +62,10 @@ export class AIFactory {
    */
   public static getDifficultyDescription(level: number): string {
     const descriptions: Record<number, string> = {
-      1: 'Perfect for beginners. AI makes simple moves with some randomness.',
-      2: 'Good challenge for casual players. AI thinks ahead 4 moves.',
-      3: 'Tough opponent. AI uses advanced tactics and opening book.',
-      4: 'Expert level. Deep search and perfect opening play.',
+      1: 'Perfect for beginners. Shallow search with varied play, but always captures when possible.',
+      2: 'Good challenge for casual players. Thinks 4 moves ahead with slight variation.',
+      3: 'Tough opponent. Deep 6-ply search with opening book and perfect tactical play.',
+      4: 'Expert level. Very deep 10-ply search, opening book, and flawless strategy.',
       5: 'Adaptive AI that learns your playing style and exploits weaknesses.',
     };
     return descriptions[level] || '';

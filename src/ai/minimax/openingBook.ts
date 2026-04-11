@@ -3,7 +3,7 @@
  * Pre-computed optimal opening moves
  */
 
-import { Move, Position, PlayerType } from '@/core/types';
+import { Move, Position, PlayerType, PieceType } from '@/core/types';
 
 /**
  * Opening move entry
@@ -122,7 +122,11 @@ class OpeningBook {
   /**
    * Get opening move for goats
    */
-  public getGoatOpening(turnNumber: number, occupiedPositions: Set<string>): Move | null {
+  public getGoatOpening(
+    turnNumber: number,
+    occupiedPositions: Set<string>,
+    boardGrid?: PieceType[][]
+  ): Move | null {
     let phase: string;
 
     if (turnNumber <= 2) {
@@ -138,10 +142,18 @@ class OpeningBook {
     const openings = this.goatOpenings.get(phase);
     if (!openings) return null;
 
-    // Filter out occupied positions
+    // Filter out occupied positions and positions threatened by tigers
     const availableMoves = openings.filter((opening) => {
       const posKey = `${opening.move.to.row},${opening.move.to.col}`;
-      return !occupiedPositions.has(posKey);
+      if (occupiedPositions.has(posKey)) return false;
+
+      // If board grid provided, reject positions where a tiger can immediately capture
+      if (boardGrid) {
+        const to = opening.move.to;
+        if (this.isPositionThreatened(to, boardGrid)) return false;
+      }
+
+      return true;
     });
 
     if (availableMoves.length === 0) return null;
@@ -178,6 +190,43 @@ class OpeningBook {
     } else {
       return turnNumber <= 16; // Use opening book while placing goats
     }
+  }
+
+  /**
+   * Lightweight check: would placing a goat at `pos` allow a tiger to
+   * immediately capture it on the next move?  Uses raw grid (no Board instance).
+   */
+  private isPositionThreatened(pos: Position, grid: PieceType[][]): boolean {
+    // Directions: horizontal, vertical, and diagonal
+    const dirs = [
+      [-1, 0], [1, 0], [0, -1], [0, 1],
+      [-1, -1], [-1, 1], [1, -1], [1, 1],
+    ];
+
+    for (const [dr, dc] of dirs) {
+      const tigerRow = pos.row - dr;
+      const tigerCol = pos.col - dc;
+      const landingRow = pos.row + dr;
+      const landingCol = pos.col + dc;
+
+      // Check bounds
+      if (
+        tigerRow < 0 || tigerRow > 4 || tigerCol < 0 || tigerCol > 4 ||
+        landingRow < 0 || landingRow > 4 || landingCol < 0 || landingCol > 4
+      ) continue;
+
+      // Tiger adjacent in this direction, landing square empty
+      if (
+        grid[tigerRow][tigerCol] === PieceType.TIGER &&
+        grid[landingRow][landingCol] === PieceType.EMPTY
+      ) {
+        // Corner goats can't be jumped over, but this position isn't a corner
+        // (opening book never suggests corners), so any tiger+empty-landing = threatened
+        return true;
+      }
+    }
+
+    return false;
   }
 }
 

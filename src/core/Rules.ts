@@ -90,8 +90,16 @@ export class Rules {
   }
 
   /**
+   * Check if a position is a corner
+   */
+  private static isCornerPosition(pos: Position): boolean {
+    return (pos.row === 0 || pos.row === 4) && (pos.col === 0 || pos.col === 4);
+  }
+
+  /**
    * Get valid capture moves for a tiger
    * Tiger can jump over a goat to an empty point beyond
+   * A tiger cannot jump over a goat at a corner position
    */
   private static getCaptureMoves(board: Board, from: Position): ValidMove[] {
     const validMoves: ValidMove[] = [];
@@ -100,6 +108,11 @@ export class Rules {
     for (const neighbor of neighbors) {
       // Check if neighbor is a goat
       if (board.getPiece(neighbor) === PieceType.GOAT) {
+        // A tiger cannot jump over a corner position goat
+        if (this.isCornerPosition(neighbor)) {
+          continue;
+        }
+
         // Calculate landing position (two steps from 'from' in same direction)
         const rowDiff = neighbor.row - from.row;
         const colDiff = neighbor.col - from.col;
@@ -254,7 +267,24 @@ export class Rules {
       return PlayerType.GOAT;
     }
 
+    // Check if tigers win by blocking all goat moves (rare case)
+    if (this.isTigerWinByBlocking(board, phase)) {
+      return PlayerType.TIGER;
+    }
+
     return null;
+  }
+
+  /**
+   * Check if tigers win by blocking all goat moves (movement phase only)
+   */
+  public static isTigerWinByBlocking(board: Board, phase: GamePhase): boolean {
+    if (phase !== GamePhase.MOVEMENT) {
+      return false;
+    }
+
+    const goatMoves = this.getMovementMoves(board, PlayerType.GOAT);
+    return goatMoves.length === 0;
   }
 
   /**

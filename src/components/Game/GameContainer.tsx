@@ -117,8 +117,8 @@ const GameContainer: React.FC = () => {
     setIsAIThinking(true);
 
     try {
-      // Small delay for UX (let user see the thinking indicator)
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Brief delay for UX (let user see the thinking indicator)
+      await new Promise((resolve) => setTimeout(resolve, 150));
 
       const move = await aiEngine.getMove(gameState, gameState.currentPlayer);
 

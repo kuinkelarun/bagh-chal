@@ -96,25 +96,11 @@ export class Board {
 
   /**
    * Check if a position has diagonal connections
-   * Diagonals exist at:
-   * - All corners: (0,0), (0,4), (4,0), (4,4)
-   * - Center point: (2,2)
-   * - Edge midpoints: (0,2), (2,0), (2,4), (4,2)
+   * All positions on the board have diagonal connections
+   * (the board has diagonal lines in every cell)
    */
-  private hasDiagonalConnections(pos: Position): boolean {
-    const { row, col } = pos;
-
-    // Center point
-    if (row === 2 && col === 2) return true;
-
-    // Corners
-    if ((row === 0 || row === 4) && (col === 0 || col === 4)) return true;
-
-    // Edge midpoints
-    if ((row === 0 || row === 4) && col === 2) return true;
-    if ((col === 0 || col === 4) && row === 2) return true;
-
-    return false;
+  private hasDiagonalConnections(_pos: Position): boolean {
+    return true;
   }
 
   /**
@@ -181,10 +167,8 @@ export class Board {
       // Horizontal jump
       return { row: pos1.row, col: pos1.col + colDiff / 2 };
     } else if (Math.abs(rowDiff) === 2 && Math.abs(colDiff) === 2) {
-      // Diagonal jump (only valid from diagonal positions)
-      if (this.hasDiagonalConnections(pos1)) {
-        return { row: pos1.row + rowDiff / 2, col: pos1.col + colDiff / 2 };
-      }
+      // Diagonal jump
+      return { row: pos1.row + rowDiff / 2, col: pos1.col + colDiff / 2 };
     }
 
     return null;

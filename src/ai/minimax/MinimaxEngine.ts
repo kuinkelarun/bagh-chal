@@ -12,6 +12,7 @@ import { Board } from '@/core/Board';
 import {
   GameState,
   Move,
+  Position,
   PlayerType,
   ValidMove,
   PieceType,
@@ -72,50 +73,23 @@ export class MinimaxEngine implements AIEngine {
       }
     }
 
-    // Use iterative deepening
-    let bestMove: Move | null = null;
+    // Search all moves and collect evaluations
     const maxDepth = this.config.depth || 4;
+    const moveEvals = this.searchAllMoves(gameState, maxDepth, playerType);
 
-    try {
-      for (let depth = 1; depth <= maxDepth; depth++) {
-        if (this.shouldStop || this.isTimeUp()) break;
-
-        const result = this.search(gameState, depth, playerType);
-        if (result.move) {
-          bestMove = result.move;
-          console.log(
-            `Depth ${depth}: eval=${result.evaluation}, nodes=${this.nodesSearched}`
-          );
-        }
-      }
-    } catch (error) {
-      console.error('Search error:', error);
-    }
-
-    // If no move found, get any valid move
-    if (!bestMove) {
+    if (moveEvals.size === 0) {
+      // Fallback: get any valid move
       const game = new Game();
       game.loadState(gameState);
       const validMoves = game.getValidMoves();
-
       if (validMoves.length > 0) {
-        bestMove = validMoves[0].move;
-      } else {
-        throw new Error('No valid moves available');
+        return validMoves[0].move;
       }
+      throw new Error('No valid moves available');
     }
 
-    // Add randomness for lower difficulties
-    if (this.config.randomness && Math.random() < this.config.randomness) {
-      const game = new Game();
-      game.loadState(gameState);
-      const validMoves = game.getValidMoves();
-
-      if (validMoves.length > 0) {
-        bestMove = validMoves[Math.floor(Math.random() * validMoves.length)].move;
-        console.log('Using random move for variety');
-      }
-    }
+    // Select move using softmax (captures always played, randomness only on non-captures)
+    const bestMove = this.selectSoftmaxMove(moveEvals, this.config.randomness || 0);
 
     const thinkingTime = Date.now() - this.startTime;
     console.log(`AI thinking time: ${thinkingTime}ms, nodes: ${this.nodesSearched}`);
@@ -124,24 +98,117 @@ export class MinimaxEngine implements AIEngine {
   }
 
   /**
-   * Main search function with iterative deepening
+   * Search all moves to the given depth and return evaluations + capture flags
    */
-  private search(
+  private searchAllMoves(
     gameState: GameState,
-    depth: number,
+    maxDepth: number,
     playerType: PlayerType
-  ): AIMoveResult {
-    const alpha = -Infinity;
-    const beta = Infinity;
+  ): Map<string, { evaluation: number; isCapture: boolean; move: Move }> {
+    const game = new Game();
+    game.loadState(gameState);
+    const validMoves = game.getValidMoves();
 
-    const result = this.minimax(gameState, depth, alpha, beta, playerType, playerType);
+    const moveEvals = new Map<string, { evaluation: number; isCapture: boolean; move: Move }>();
 
-    return {
-      move: result.bestMove!,
-      evaluation: result.evaluation,
-      nodesSearched: this.nodesSearched,
-      searchDepth: depth,
-    };
+    // Use iterative deepening to get progressively better evaluations
+    for (let depth = 1; depth <= maxDepth; depth++) {
+      if (this.shouldStop || this.isTimeUp()) break;
+
+      for (const vm of validMoves) {
+        if (this.shouldStop || this.isTimeUp()) break;
+
+        const newGame = game.clone();
+        newGame.makeMove(vm.move);
+        const newState = newGame.getState();
+
+        const result = this.minimax(
+          newState,
+          depth - 1,
+          -Infinity,
+          Infinity,
+          newState.currentPlayer,
+          playerType
+        );
+
+        const key = this.getMoveKey(vm.move);
+        moveEvals.set(key, {
+          evaluation: result.evaluation,
+          isCapture: !!vm.isCapture,
+          move: vm.move,
+        });
+      }
+
+      console.log(`Depth ${depth}: evaluated ${validMoves.length} moves, nodes=${this.nodesSearched}`);
+    }
+
+    return moveEvals;
+  }
+
+  /**
+   * Select a move using softmax distribution.
+   * ALWAYS plays a capture move if one exists (never randomizes away captures).
+   * Only applies softmax randomness to non-capture moves.
+   */
+  private selectSoftmaxMove(
+    moveEvals: Map<string, { evaluation: number; isCapture: boolean; move: Move }>,
+    randomness: number
+  ): Move {
+    const entries = Array.from(moveEvals.values());
+
+    // Separate captures from non-captures
+    const captures = entries.filter(e => e.isCapture);
+    const nonCaptures = entries.filter(e => !e.isCapture);
+
+    // If there are capture moves, ALWAYS pick the best capture
+    if (captures.length > 0) {
+      captures.sort((a, b) => b.evaluation - a.evaluation);
+      console.log(`Playing best capture move (eval: ${captures[0].evaluation})`);
+      return captures[0].move;
+    }
+
+    // No captures — apply softmax selection among non-capture moves
+    if (randomness <= 0 || nonCaptures.length <= 1) {
+      // Zero randomness or only one move: pick the best
+      entries.sort((a, b) => b.evaluation - a.evaluation);
+      return entries[0].move;
+    }
+
+    // Softmax temperature: lower randomness → lower temperature → more deterministic
+    // randomness 0.4 (Easy) → temperature ~2.0; randomness 0.15 (Medium) → temperature ~0.75
+    const temperature = randomness * 5;
+
+    // Find max eval for numerical stability
+    const maxEval = Math.max(...nonCaptures.map(e => e.evaluation));
+
+    // Compute softmax probabilities
+    const expValues = nonCaptures.map(e => Math.exp((e.evaluation - maxEval) / temperature));
+    const sumExp = expValues.reduce((sum, v) => sum + v, 0);
+    const probabilities = expValues.map(v => v / sumExp);
+
+    // Sample from the distribution
+    const rand = Math.random();
+    let cumulative = 0;
+    for (let i = 0; i < nonCaptures.length; i++) {
+      cumulative += probabilities[i];
+      if (rand <= cumulative) {
+        console.log(`Softmax selected move ${i} (eval: ${nonCaptures[i].evaluation}, prob: ${(probabilities[i] * 100).toFixed(1)}%)`);
+        return nonCaptures[i].move;
+      }
+    }
+
+    // Fallback (shouldn't happen)
+    return nonCaptures[nonCaptures.length - 1].move;
+  }
+
+  /**
+   * Create a string key for a move (for Map storage)
+   */
+  private getMoveKey(move: Move): string {
+    const from = move.from ? `${move.from.row},${move.from.col}` : 'null';
+    const to = `${move.to.row},${move.to.col}`;
+    const cap = move.captured ? `${move.captured.row},${move.captured.col}` : 'null';
+    return `${from}->${to}|${cap}`;
   }
 
   /**
@@ -319,7 +386,7 @@ export class MinimaxEngine implements AIEngine {
           }
         }
       }
-      return openingBook.getGoatOpening(gameState.turnNumber, occupied);
+      return openingBook.getGoatOpening(gameState.turnNumber, occupied, gameState.board);
     }
   }
 
@@ -363,26 +430,35 @@ export class MinimaxEngine implements AIEngine {
   public setDifficulty(level: number): void {
     this.config.level = level;
 
-    // Adjust depth based on difficulty
     switch (level) {
       case 1:
         this.config.depth = 2;
-        this.config.randomness = 0.2;
+        this.config.randomness = 0.4;
+        this.config.useOpeningBook = false;
+        this.maxTime = 2000;
         break;
       case 2:
         this.config.depth = 4;
-        this.config.randomness = 0.1;
+        this.config.randomness = 0.15;
+        this.config.useOpeningBook = false;
+        this.maxTime = 5000;
         break;
       case 3:
         this.config.depth = 6;
-        this.config.randomness = 0.05;
+        this.config.randomness = 0;
+        this.config.useOpeningBook = true;
+        this.maxTime = 10000;
         break;
       case 4:
-        this.config.depth = 8;
+        this.config.depth = 10;
         this.config.randomness = 0;
+        this.config.useOpeningBook = true;
+        this.maxTime = 15000;
         break;
       default:
         this.config.depth = 4;
+        this.config.randomness = 0.15;
+        this.maxTime = 5000;
     }
   }
 

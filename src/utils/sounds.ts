@@ -22,69 +22,103 @@ function getCtx(): AudioContext {
 }
 
 /**
- * Schedules a short envelope on a gain node and disconnects it when done.
- * @param gainNode - The gain to ramp
- * @param peak     - Peak gain value
- * @param attack   - Attack duration in seconds
- * @param duration - Total duration in seconds
- */
-function fireEnvelope(
-  gainNode: GainNode,
-  source: AudioScheduledSourceNode,
-  ac: AudioContext,
-  peak: number,
-  attack: number,
-  duration: number,
-): void {
-  const t = ac.currentTime;
-  gainNode.gain.setValueAtTime(0, t);
-  gainNode.gain.linearRampToValueAtTime(peak, t + attack);
-  gainNode.gain.exponentialRampToValueAtTime(0.001, t + duration);
-  source.start(t);
-  source.stop(t + duration + 0.01);
-}
-
-/**
- * A soft descending sine blip played on every successful move.
- * Short (~80 ms), non-intrusive.
+ * Crisp chess-piece click — white noise burst through a bandpass filter.
+ * Short (~60 ms), tactile.
  */
 export function playMoveSound(): void {
   try {
     const ac = getCtx();
-    const osc = ac.createOscillator();
+    const t = ac.currentTime;
+
+    // White noise buffer (short)
+    const len = Math.ceil(ac.sampleRate * 0.06);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+
+    const src = ac.createBufferSource();
+    src.buffer = buf;
+
+    // Bandpass to shape the click
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 3000;
+    bp.Q.value = 1.2;
+
     const gain = ac.createGain();
+    gain.gain.setValueAtTime(0, t);
+    gain.gain.linearRampToValueAtTime(0.35, t + 0.003);
+    gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
 
-    osc.type = 'sine';
-    osc.frequency.setValueAtTime(520, ac.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(340, ac.currentTime + 0.08);
-
-    osc.connect(gain);
+    src.connect(bp);
+    bp.connect(gain);
     gain.connect(ac.destination);
 
-    fireEnvelope(gain, osc, ac, 0.18, 0.005, 0.1);
+    src.start(t);
+    src.stop(t + 0.06);
   } catch {
     // Silently ignore — sound is non-critical
   }
 }
 
 /**
- * A sharper triangle-wave knock played when a goat is captured.
- * Slightly louder and higher-pitched than the move sound.
+ * Recycle-bin crunch: 3-layer noise burst (low rumble + mid crunch + high crackle).
+ * ~200 ms, louder and more textured than the move click.
  */
 export function playCaptureSound(): void {
   try {
     const ac = getCtx();
-    const osc = ac.createOscillator();
-    const gain = ac.createGain();
+    const t = ac.currentTime;
+    const duration = 0.2;
 
-    osc.type = 'triangle';
-    osc.frequency.setValueAtTime(700, ac.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(280, ac.currentTime + 0.12);
+    const len = Math.ceil(ac.sampleRate * duration);
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
 
-    osc.connect(gain);
-    gain.connect(ac.destination);
+    // Layer 1 — low rumble
+    const s1 = ac.createBufferSource();
+    s1.buffer = buf;
+    const lp = ac.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 400;
+    const g1 = ac.createGain();
+    g1.gain.setValueAtTime(0.3, t);
+    g1.gain.exponentialRampToValueAtTime(0.001, t + duration);
+    s1.connect(lp);
+    lp.connect(g1);
+    g1.connect(ac.destination);
 
-    fireEnvelope(gain, osc, ac, 0.28, 0.004, 0.14);
+    // Layer 2 — mid crunch
+    const s2 = ac.createBufferSource();
+    s2.buffer = buf;
+    const bp = ac.createBiquadFilter();
+    bp.type = 'bandpass';
+    bp.frequency.value = 1500;
+    bp.Q.value = 0.8;
+    const g2 = ac.createGain();
+    g2.gain.setValueAtTime(0.4, t);
+    g2.gain.exponentialRampToValueAtTime(0.001, t + duration * 0.7);
+    s2.connect(bp);
+    bp.connect(g2);
+    g2.connect(ac.destination);
+
+    // Layer 3 — high crackle
+    const s3 = ac.createBufferSource();
+    s3.buffer = buf;
+    const hp = ac.createBiquadFilter();
+    hp.type = 'highpass';
+    hp.frequency.value = 4000;
+    const g3 = ac.createGain();
+    g3.gain.setValueAtTime(0.15, t);
+    g3.gain.exponentialRampToValueAtTime(0.001, t + duration * 0.5);
+    s3.connect(hp);
+    hp.connect(g3);
+    g3.connect(ac.destination);
+
+    s1.start(t); s1.stop(t + duration);
+    s2.start(t); s2.stop(t + duration);
+    s3.start(t); s3.stop(t + duration);
   } catch {
     // Silently ignore
   }
