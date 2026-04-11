@@ -452,10 +452,14 @@ export class MinimaxEngine implements AIEngine {
 
     const board = new Board();
     board.fromArray(gameState.board);
-    const criticalBlockSquares = this.getImmediateGoatBlockSquares(board);
-
-    if (criticalBlockSquares.size === 0) {
+    const baselineThreats = this.collectImmediateCaptureThreats(board);
+    if (baselineThreats.length === 0) {
       return validMoves;
+    }
+
+    const criticalBlockSquares = new Set<string>();
+    for (const threat of baselineThreats) {
+      criticalBlockSquares.add(`${threat.landing.row},${threat.landing.col}`);
     }
 
     const blockingMoves = validMoves.filter((vm) =>
@@ -463,7 +467,60 @@ export class MinimaxEngine implements AIEngine {
     );
 
     if (blockingMoves.length > 0) {
-      console.log(`Emergency goat placement: prioritizing ${blockingMoves.length} block moves`);
+      const lastMove = gameState.moveHistory.length > 0
+        ? gameState.moveHistory[gameState.moveHistory.length - 1]
+        : null;
+
+      const scored = blockingMoves.map((vm) => {
+        const to = vm.move.to;
+
+        // Simulate this placement to evaluate safety + impact.
+        board.setPiece(to, PieceType.GOAT);
+
+        const afterThreats = this.collectImmediateCaptureThreats(board);
+        const blockedThreatCount = baselineThreats.length - afterThreats.length;
+        const placedGoatThreatened = this.isGoatImmediatelyCapturable(board, to);
+        const adjacentTigers = this.countAdjacentTigers(board, to);
+
+        board.setPiece(to, PieceType.EMPTY);
+
+        // Avoid repeating the exact square that was just captured unless unavoidable.
+        const repeatCapturePenalty =
+          lastMove?.captured &&
+          lastMove.captured.row === to.row &&
+          lastMove.captured.col === to.col
+            ? 180
+            : 0;
+
+        const score =
+          blockedThreatCount * 1000 -
+          afterThreats.length * 70 -
+          (placedGoatThreatened ? 500 : 0) -
+          adjacentTigers * 40 -
+          repeatCapturePenalty;
+
+        return {
+          vm,
+          score,
+          blockedThreatCount,
+          placedGoatThreatened,
+        };
+      });
+
+      // Prefer safe block placements when available.
+      const safeBlocks = scored.filter((s) => s.blockedThreatCount > 0 && !s.placedGoatThreatened);
+      const pool = safeBlocks.length > 0 ? safeBlocks : scored;
+
+      const bestScore = Math.max(...pool.map((s) => s.score));
+      const bestMoves = pool.filter((s) => s.score === bestScore).map((s) => s.vm);
+
+      if (bestMoves.length > 0) {
+        console.log(
+          `Emergency goat placement: ${blockingMoves.length} block options, ${bestMoves.length} best-safe options selected`
+        );
+        return bestMoves;
+      }
+
       return blockingMoves;
     }
 
@@ -474,7 +531,7 @@ export class MinimaxEngine implements AIEngine {
    * True if at least one goat can be captured immediately by any tiger.
    */
   private hasImmediateGoatThreat(board: Board): boolean {
-    return this.getImmediateGoatBlockSquares(board).size > 0;
+    return this.collectImmediateCaptureThreats(board).length > 0;
   }
 
   /**
@@ -482,6 +539,22 @@ export class MinimaxEngine implements AIEngine {
    */
   private getImmediateGoatBlockSquares(board: Board): Set<string> {
     const blockSquares = new Set<string>();
+    const threats = this.collectImmediateCaptureThreats(board);
+
+    for (const threat of threats) {
+      blockSquares.add(`${threat.landing.row},${threat.landing.col}`);
+    }
+
+    return blockSquares;
+  }
+
+  /**
+   * Enumerate all immediate tiger capture threats in the current board position.
+   */
+  private collectImmediateCaptureThreats(
+    board: Board
+  ): Array<{ tiger: Position; goat: Position; landing: Position }> {
+    const threats: Array<{ tiger: Position; goat: Position; landing: Position }> = [];
     const tigers = board.getPiecesOfType(PieceType.TIGER);
 
     for (const tigerPos of tigers) {
@@ -502,12 +575,49 @@ export class MinimaxEngine implements AIEngine {
           board.isEmpty(landing) &&
           board.areAdjacent(goatPos, landing)
         ) {
-          blockSquares.add(`${landing.row},${landing.col}`);
+          threats.push({ tiger: tigerPos, goat: goatPos, landing });
         }
       }
     }
 
-    return blockSquares;
+    return threats;
+  }
+
+  /**
+   * Check if a goat at `goatPos` can be captured immediately by any tiger.
+   */
+  private isGoatImmediatelyCapturable(board: Board, goatPos: Position): boolean {
+    if (this.isCorner(goatPos)) return false;
+
+    const tigers = board.getPiecesOfType(PieceType.TIGER);
+    for (const tigerPos of tigers) {
+      if (!board.areAdjacent(tigerPos, goatPos)) continue;
+
+      const rowDiff = goatPos.row - tigerPos.row;
+      const colDiff = goatPos.col - tigerPos.col;
+      const landing: Position = {
+        row: goatPos.row + rowDiff,
+        col: goatPos.col + colDiff,
+      };
+
+      if (
+        board.isValidPosition(landing) &&
+        board.isEmpty(landing) &&
+        board.areAdjacent(goatPos, landing)
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
+   * Count adjacent tigers around a position.
+   */
+  private countAdjacentTigers(board: Board, pos: Position): number {
+    const neighbors = board.getNeighbors(pos);
+    return neighbors.filter((n) => board.getPiece(n) === PieceType.TIGER).length;
   }
 
   /**
