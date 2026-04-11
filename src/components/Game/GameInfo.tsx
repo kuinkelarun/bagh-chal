@@ -35,6 +35,8 @@ const GameInfo: React.FC<GameInfoProps> = ({ gameState }) => {
         return '🏆 Tigers Win!';
       case GameStatus.GOAT_WIN:
         return '🏆 Goats Win!';
+      case GameStatus.DRAW:
+        return '🤝 Game Drawn!';
       default:
         return getCurrentPlayerText();
     }
@@ -46,6 +48,8 @@ const GameInfo: React.FC<GameInfoProps> = ({ gameState }) => {
         return 'bg-orange-500 text-white';
       case GameStatus.GOAT_WIN:
         return 'bg-green-500 text-white';
+      case GameStatus.DRAW:
+        return 'bg-amber-400 text-white';
       default:
         return currentPlayer === PlayerType.TIGER
           ? 'bg-orange-100 text-orange-800'

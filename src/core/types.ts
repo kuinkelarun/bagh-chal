@@ -34,6 +34,7 @@ export enum GameStatus {
   IN_PROGRESS = 'in_progress',
   TIGER_WIN = 'tiger_win',
   GOAT_WIN = 'goat_win',
+  DRAW = 'draw',
 }
 
 /**

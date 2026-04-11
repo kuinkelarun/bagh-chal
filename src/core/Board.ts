@@ -206,6 +206,21 @@ export class Board {
   }
 
   /**
+   * Compact string key for the current board state.
+   * Maps each cell to a single char (e/t/g) for fast hashing.
+   */
+  public toKey(): string {
+    let key = '';
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      for (let c = 0; c < BOARD_SIZE; c++) {
+        const p = this.grid[r][c];
+        key += p === PieceType.TIGER ? 't' : p === PieceType.GOAT ? 'g' : 'e';
+      }
+    }
+    return key;
+  }
+
+  /**
    * Get board as 2D array (for serialization)
    */
   public toArray(): PieceType[][] {

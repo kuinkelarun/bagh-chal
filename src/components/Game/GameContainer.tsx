@@ -13,6 +13,7 @@ import MoveAnalysis from '../AI/MoveAnalysis';
 import GameStatistics from './GameStatistics';
 import RulesModal from '../Tutorial/RulesModal';
 import WelcomeModal from '../Tutorial/WelcomeModal';
+import DrawOfferModal from './DrawOfferModal';
 import { GameStatisticsTracker, GameRecord, MoveRecord } from '@/utils/gameStatistics';
 import { useKeyboardShortcuts } from '@/hooks/useKeyboardShortcuts';
 import { useAIWorker } from '@/hooks/useAIWorker';
@@ -49,6 +50,14 @@ const GameContainer: React.FC = () => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   // Track whether we've already played the win sound for this game
   const [winSoundPlayed, setWinSoundPlayed] = useState(false);
+
+  // Draw offer state
+  const [isDrawOfferOpen, setIsDrawOfferOpen] = useState(false);
+  const [drawOfferReason, setDrawOfferReason] = useState<'repetition' | 'no-progress'>('repetition');
+  // The repetition count at which the user last declined (re-prompt at next multiple of 3)
+  const [drawDeclinedAt, setDrawDeclinedAt] = useState(0);
+  // Track last goatsCaptured + goatsRemaining to detect progress and reset drawDeclinedAt
+  const [lastProgressSnapshot, setLastProgressSnapshot] = useState({ captured: 0, remaining: 20 });
 
   // Initialize AI engine
   useEffect(() => {
@@ -197,10 +206,10 @@ const GameContainer: React.FC = () => {
 
   // Trigger AI move when it's AI's turn
   useEffect(() => {
-    if (isCurrentPlayerAI() && gameState.status === GameStatus.IN_PROGRESS) {
+    if (isCurrentPlayerAI() && gameState.status === GameStatus.IN_PROGRESS && !isDrawOfferOpen) {
       makeAIMove();
     }
-  }, [gameState.currentPlayer, gameState.status, gameMode]);
+  }, [gameState.currentPlayer, gameState.status, gameMode, isDrawOfferOpen]);
 
   // Handle point click
   const handlePointClick = (position: Position) => {
@@ -282,7 +291,12 @@ const GameContainer: React.FC = () => {
     if (gameMode === 'human-vs-human') return; // Only track vs AI games
 
     const humanSide = gameMode === 'human-vs-ai' ? PlayerType.GOAT : PlayerType.TIGER;
-    const winner = gameState.status === GameStatus.TIGER_WIN ? PlayerType.TIGER : PlayerType.GOAT;
+    const winner =
+      gameState.status === GameStatus.DRAW
+        ? null
+        : gameState.status === GameStatus.TIGER_WIN
+          ? PlayerType.TIGER
+          : PlayerType.GOAT;
 
     const gameRecord: GameRecord = {
       id: `game_${Date.now()}`,
@@ -315,6 +329,35 @@ const GameContainer: React.FC = () => {
     }
   }, [gameState.status]);
 
+  // Detect repetition / stuck game and offer draw
+  useEffect(() => {
+    if (gameState.status !== GameStatus.IN_PROGRESS) return;
+    if (isDrawOfferOpen) return;
+
+    // Reset drawDeclinedAt when progress happens (capture or placement)
+    const { captured, remaining } = lastProgressSnapshot;
+    if (gameState.goatsCaptured !== captured || gameState.goatsRemaining !== remaining) {
+      setLastProgressSnapshot({ captured: gameState.goatsCaptured, remaining: gameState.goatsRemaining });
+      setDrawDeclinedAt(0);
+    }
+
+    const repCount = game.getRepetitionCount();
+    const noProgress = game.getMovesSinceProgress();
+
+    // Threefold repetition: prompt at 3, then at every subsequent multiple of 3 past the declined threshold
+    if (repCount >= 3 && repCount > drawDeclinedAt) {
+      setDrawOfferReason('repetition');
+      setIsDrawOfferOpen(true);
+      return;
+    }
+
+    // No-progress safety net: 200 consecutive moves without capture/placement (movement phase only)
+    if (noProgress >= 200 && noProgress > drawDeclinedAt) {
+      setDrawOfferReason('no-progress');
+      setIsDrawOfferOpen(true);
+    }
+  }, [gameState.turnNumber]);
+
   // Handle new game
   const handleNewGame = () => {
     game.reset();
@@ -324,6 +367,9 @@ const GameContainer: React.FC = () => {
     setGameStartTime(Date.now());
     setMoveRecords([]);
     setWinSoundPlayed(false);
+    setIsDrawOfferOpen(false);
+    setDrawDeclinedAt(0);
+    setLastProgressSnapshot({ captured: 0, remaining: 20 });
     updateGameState();
   };
 
@@ -537,15 +583,25 @@ const GameContainer: React.FC = () => {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-2xl p-6 md:p-8 max-w-md w-full text-center">
             <div className="text-6xl mb-4">
-              {gameState.status === GameStatus.TIGER_WIN ? '🐅' : '🐐'}
+              {gameState.status === GameStatus.DRAW
+                ? '🤝'
+                : gameState.status === GameStatus.TIGER_WIN
+                  ? '🐅'
+                  : '🐐'}
             </div>
             <h2 className="text-3xl font-bold mb-4">
-              {gameState.status === GameStatus.TIGER_WIN ? 'Tigers Win!' : 'Goats Win!'}
+              {gameState.status === GameStatus.DRAW
+                ? 'Game Drawn!'
+                : gameState.status === GameStatus.TIGER_WIN
+                  ? 'Tigers Win!'
+                  : 'Goats Win!'}
             </h2>
             <p className="text-gray-600 mb-6">
-              {gameState.status === GameStatus.TIGER_WIN
-                ? `Tigers captured ${gameState.goatsCaptured} goats!`
-                : 'All tigers are blocked!'}
+              {gameState.status === GameStatus.DRAW
+                ? 'The game ended in a draw by mutual agreement.'
+                : gameState.status === GameStatus.TIGER_WIN
+                  ? `Tigers captured ${gameState.goatsCaptured} goats!`
+                  : 'All tigers are blocked!'}
             </p>
             <button
               onClick={handleRequestNewGame}
@@ -556,6 +612,24 @@ const GameContainer: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Draw offer modal */}
+      <DrawOfferModal
+        isOpen={isDrawOfferOpen}
+        onAcceptDraw={() => {
+          game.declareDraw();
+          setIsDrawOfferOpen(false);
+          updateGameState();
+        }}
+        onContinue={() => {
+          // Record current threshold so we don't re-prompt until next multiple of 3
+          const rep = game.getRepetitionCount();
+          const noP = game.getMovesSinceProgress();
+          setDrawDeclinedAt(Math.max(rep, noP));
+          setIsDrawOfferOpen(false);
+        }}
+        reason={drawOfferReason}
+      />
 
       {/* Game mode picker modal (shown on reload and before every new game) */}
       {isModePickerOpen && (

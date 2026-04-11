@@ -29,6 +29,10 @@ export class Game {
   private turnNumber: number;
   private config: GameConfig;
 
+  // Repetition / stuck-game tracking
+  private positionCounts: Map<string, number> = new Map();
+  private movesSinceProgress: number = 0;
+
   constructor(config: GameConfig = DEFAULT_CONFIG) {
     this.config = config;
     this.board = new Board();
@@ -39,9 +43,14 @@ export class Game {
     this.moveHistory = [];
     this.status = GameStatus.IN_PROGRESS;
     this.turnNumber = 0;
+    this.positionCounts = new Map();
+    this.movesSinceProgress = 0;
 
     // Initialize board with tigers in corners
     this.board.initializeBoard();
+
+    // Record the initial position
+    this.recordPosition();
   }
 
   /**
@@ -78,6 +87,13 @@ export class Game {
       }
     }
 
+    // Track progress (captures and placements reset the counter)
+    if (move.captured !== null || move.from === null) {
+      this.movesSinceProgress = 0;
+    } else {
+      this.movesSinceProgress++;
+    }
+
     // Check for game over
     this.updateGameStatus();
 
@@ -85,6 +101,9 @@ export class Game {
     if (this.status === GameStatus.IN_PROGRESS) {
       this.switchPlayer();
     }
+
+    // Record position after player switch (board + whose turn + phase)
+    this.recordPosition();
 
     return true;
   }
@@ -97,6 +116,9 @@ export class Game {
     if (this.moveHistory.length === 0) {
       return false;
     }
+
+    // Decrement position count for current state before we undo
+    this.decrementPosition();
 
     const lastMove = this.moveHistory.pop()!;
 
@@ -128,6 +150,14 @@ export class Game {
 
     // Reset game status
     this.status = GameStatus.IN_PROGRESS;
+
+    // Recalculate movesSinceProgress from remaining history
+    this.movesSinceProgress = 0;
+    for (let i = this.moveHistory.length - 1; i >= 0; i--) {
+      const m = this.moveHistory[i];
+      if (m.captured !== null || m.from === null) break;
+      this.movesSinceProgress++;
+    }
 
     return true;
   }
@@ -223,6 +253,11 @@ export class Game {
     this.moveHistory = [];
     this.status = GameStatus.IN_PROGRESS;
     this.turnNumber = 0;
+    this.positionCounts = new Map();
+    this.movesSinceProgress = 0;
+
+    // Record the initial position
+    this.recordPosition();
   }
 
   /**
@@ -253,6 +288,11 @@ export class Game {
     this.moveHistory = [...state.moveHistory];
     this.status = state.status;
     this.turnNumber = state.turnNumber;
+
+    // Reset repetition tracking on state load
+    this.positionCounts = new Map();
+    this.movesSinceProgress = 0;
+    this.recordPosition();
   }
 
   /**
@@ -326,6 +366,48 @@ export class Game {
     if (this.status === GameStatus.GOAT_WIN) return PlayerType.GOAT;
     return null;
   }
+
+  // ── Repetition / stuck-game detection ──────────────────────────────
+
+  /** Build a compact key representing the current position + turn + phase. */
+  private buildPositionKey(): string {
+    return `${this.board.toKey()}|${this.currentPlayer}|${this.phase}`;
+  }
+
+  /** Record the current position in the repetition map. */
+  private recordPosition(): void {
+    const key = this.buildPositionKey();
+    this.positionCounts.set(key, (this.positionCounts.get(key) || 0) + 1);
+  }
+
+  /** Decrement the current position count (used before undoing a move). */
+  private decrementPosition(): void {
+    const key = this.buildPositionKey();
+    const count = this.positionCounts.get(key) || 0;
+    if (count <= 1) {
+      this.positionCounts.delete(key);
+    } else {
+      this.positionCounts.set(key, count - 1);
+    }
+  }
+
+  /** How many times the current board+turn+phase has been seen. */
+  public getRepetitionCount(): number {
+    const key = this.buildPositionKey();
+    return this.positionCounts.get(key) || 0;
+  }
+
+  /** How many consecutive moves have passed without a capture or placement. */
+  public getMovesSinceProgress(): number {
+    return this.movesSinceProgress;
+  }
+
+  /** Declare the game as a draw (called from UI after user accepts). */
+  public declareDraw(): void {
+    this.status = GameStatus.DRAW;
+  }
+
+  // ── Cloning ────────────────────────────────────────────────────────
 
   /**
    * Clone the game (for AI simulations)

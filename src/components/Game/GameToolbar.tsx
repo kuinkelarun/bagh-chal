@@ -59,11 +59,11 @@ const GameToolbar: React.FC<GameToolbarProps> = ({
   const isAIMode = gameMode !== 'human-vs-human';
 
   return (
-    <div className="bg-white rounded-xl shadow-md px-3 py-2 mb-4 flex flex-wrap items-center gap-3">
+    <div className="bg-white/95 border border-amber-100 rounded-xl px-3 py-2 mb-4 flex flex-wrap items-center gap-3">
 
       {/* ── Game Mode ── */}
       <div
-        className="flex items-center gap-1 bg-gray-100 rounded-lg p-1"
+        className="flex items-center gap-1 bg-amber-50 rounded-lg p-1"
         role="group"
         aria-label="Game mode"
       >
@@ -75,8 +75,8 @@ const GameToolbar: React.FC<GameToolbarProps> = ({
             aria-label={label}
             className={`px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap ${
               gameMode === value
-                ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-sm'
-                : 'text-gray-600 hover:bg-gray-200'
+                ? 'bg-amber-500 text-white shadow-sm'
+                : 'text-slate-600 hover:bg-amber-100'
             }`}
           >
             {short}
@@ -105,8 +105,8 @@ const GameToolbar: React.FC<GameToolbarProps> = ({
                 title={`${name} — ${desc}${isAIThinking ? ' (takes effect on next AI turn)' : ''}`}
                 className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${
                   selected
-                    ? 'bg-orange-500 text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-amber-100'
                 }`}
               >
                 {name}
@@ -126,7 +126,7 @@ const GameToolbar: React.FC<GameToolbarProps> = ({
           onClick={onNewGame}
           aria-label="New game (Ctrl+N)"
           title="New Game (Ctrl+N)"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-gradient-to-r from-orange-500 to-amber-500 text-white hover:from-orange-600 hover:to-amber-600 transition-all shadow-sm active:scale-95"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 transition-all shadow-sm active:scale-95"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
