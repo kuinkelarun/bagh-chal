@@ -110,14 +110,22 @@ export class MinimaxEngine implements AIEngine {
     const validMoves = game.getValidMoves();
     const candidateMoves = this.prioritizeEmergencyGoatPlacements(validMoves, gameState, playerType);
 
-    const moveEvals = new Map<string, { evaluation: number; isCapture: boolean; move: Move }>();
+    let moveEvals = new Map<string, { evaluation: number; isCapture: boolean; move: Move }>();
 
-    // Use iterative deepening to get progressively better evaluations
+    // Use iterative deepening to get progressively better evaluations.
+    // Only use results from a fully-completed depth to avoid mixed-depth evaluations
+    // (e.g. some moves at depth 7, others still at depth 6).
     for (let depth = 1; depth <= maxDepth; depth++) {
       if (this.shouldStop || this.isTimeUp()) break;
 
+      const depthEvals = new Map<string, { evaluation: number; isCapture: boolean; move: Move }>();
+      let depthComplete = true;
+
       for (const vm of candidateMoves) {
-        if (this.shouldStop || this.isTimeUp()) break;
+        if (this.shouldStop || this.isTimeUp()) {
+          depthComplete = false;
+          break;
+        }
 
         const newGame = game.clone();
         newGame.makeMove(vm.move);
@@ -133,14 +141,22 @@ export class MinimaxEngine implements AIEngine {
         );
 
         const key = this.getMoveKey(vm.move);
-        moveEvals.set(key, {
+        depthEvals.set(key, {
           evaluation: result.evaluation,
           isCapture: !!vm.isCapture,
           move: vm.move,
         });
       }
 
-      console.log(`Depth ${depth}: evaluated ${validMoves.length} moves, nodes=${this.nodesSearched}`);
+      if (depthComplete) {
+        // All moves evaluated at this depth — adopt as best result
+        moveEvals = depthEvals;
+        console.log(`Depth ${depth}: fully evaluated ${candidateMoves.length} moves, nodes=${this.nodesSearched}`);
+      } else {
+        // Timeout mid-depth — discard partial results, keep previous complete depth
+        console.log(`Depth ${depth}: timed out after ${depthEvals.size}/${candidateMoves.length} moves, using depth ${depth - 1} results`);
+        break;
+      }
     }
 
     return moveEvals;
@@ -176,30 +192,41 @@ export class MinimaxEngine implements AIEngine {
     }
 
     // Softmax temperature: lower randomness → lower temperature → more deterministic
-    // randomness 0.4 (Easy) → temperature ~2.0; randomness 0.15 (Medium) → temperature ~0.75
-    const temperature = randomness * 5;
+    // randomness 0.4 (Easy) → temperature ~1.2; randomness 0.15 (Medium) → temperature ~0.45
+    const temperature = randomness * 3;
+
+    // Filter out moves that are significantly worse than the best
+    // This prevents softmax from ever picking a terrible move
+    const bestNonCaptureEval = Math.max(...nonCaptures.map(e => e.evaluation));
+    const safeThreshold = bestNonCaptureEval - 200;
+    const safeMoves = nonCaptures.filter(e => e.evaluation >= safeThreshold);
+    const pool = safeMoves.length > 0 ? safeMoves : nonCaptures;
+
+    if (pool.length <= 1) {
+      return pool[0].move;
+    }
 
     // Find max eval for numerical stability
-    const maxEval = Math.max(...nonCaptures.map(e => e.evaluation));
+    const maxEval = Math.max(...pool.map(e => e.evaluation));
 
     // Compute softmax probabilities
-    const expValues = nonCaptures.map(e => Math.exp((e.evaluation - maxEval) / temperature));
+    const expValues = pool.map(e => Math.exp((e.evaluation - maxEval) / temperature));
     const sumExp = expValues.reduce((sum, v) => sum + v, 0);
     const probabilities = expValues.map(v => v / sumExp);
 
     // Sample from the distribution
     const rand = Math.random();
     let cumulative = 0;
-    for (let i = 0; i < nonCaptures.length; i++) {
+    for (let i = 0; i < pool.length; i++) {
       cumulative += probabilities[i];
       if (rand <= cumulative) {
-        console.log(`Softmax selected move ${i} (eval: ${nonCaptures[i].evaluation}, prob: ${(probabilities[i] * 100).toFixed(1)}%)`);
-        return nonCaptures[i].move;
+        console.log(`Softmax selected move ${i} (eval: ${pool[i].evaluation}, prob: ${(probabilities[i] * 100).toFixed(1)}%)`);
+        return pool[i].move;
       }
     }
 
     // Fallback (shouldn't happen)
-    return nonCaptures[nonCaptures.length - 1].move;
+    return pool[pool.length - 1].move;
   }
 
   /**

@@ -25,7 +25,7 @@ export class Evaluator {
     SAFE_GOAT: 10,
     ISOLATED_GOAT_PENALTY: -30,
     GOAT_MOBILITY: 12,
-    GOAT_THREAT_ANTICIPATION: -20,
+    GOAT_THREAT_ANTICIPATION: -40,
     TIGER_ADJACENCY_BLOCK: 35,
     UNSAFE_BLOCKER_PENALTY: -30,
     PLACEMENT_TIGER_ADJACENT_PENALTY: -25,
@@ -60,7 +60,7 @@ export class Evaluator {
   }
 
   // Escalating penalty as captured goats approach the loss threshold of 5
-  private static readonly CAPTURE_DANGER_SCALE = [0, 0, -20, -60, -150];
+  private static readonly CAPTURE_DANGER_SCALE = [0, -30, -80, -180, -400];
 
   /**
    * Evaluate position from a player's perspective
@@ -262,8 +262,10 @@ export class Evaluator {
         score += adjacentGoats * this.WEIGHTS.DEFENSIVE_FORMATION;
       }
 
-      // Safety check
-      if (!this.isGoatThreatened(board, goatPos)) {
+      // Safety check — much heavier penalty for being immediately capturable
+      if (this.isGoatThreatened(board, goatPos)) {
+        score -= 120; // Severe: this goat can be eaten next turn
+      } else {
         safeGoats++;
       }
 
@@ -277,9 +279,13 @@ export class Evaluator {
         score += this.WEIGHTS.EDGE_SAFETY;
       }
 
-      // During placement, avoid dropping goats adjacent to tigers unless corner-protected
-      if (isPlacement && adjacentTigers > 0 && !this.isCorner(goatPos)) {
-        score += adjacentTigers * this.WEIGHTS.PLACEMENT_TIGER_ADJACENT_PENALTY;
+      // During placement, penalize goat positions that are immediately capturable
+      if (isPlacement && adjacentTigers > 0) {
+        if (this.isGoatThreatened(board, goatPos)) {
+          score -= 500; // Gigantic penalty: tiger will capture this goat immediately
+        } else if (!this.isCorner(goatPos)) {
+          score += adjacentTigers * this.WEIGHTS.PLACEMENT_TIGER_ADJACENT_PENALTY;
+        }
       }
     });
 

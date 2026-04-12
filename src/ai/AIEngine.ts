@@ -81,21 +81,21 @@ export const AI_PRESETS: Record<number, AIConfig> = {
     randomness: 0.15,
   },
   3: {
-    // Hard - deep search, no randomness, uses opening book
+    // Hard - deep search, no randomness, full minimax (no opening book)
     algorithm: 'minimax',
     level: 3,
     depth: 6,
     timeLimit: 10000,
-    useOpeningBook: true,
+    useOpeningBook: false,
     randomness: 0,
   },
   4: {
-    // Expert - very deep search, perfect play
+    // Expert - deepest achievable search, perfect play
     algorithm: 'minimax',
     level: 4,
-    depth: 10,
+    depth: 7,
     timeLimit: 15000,
-    useOpeningBook: true,
+    useOpeningBook: false,
     randomness: 0,
   },
   5: {
