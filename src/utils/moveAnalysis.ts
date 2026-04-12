@@ -4,8 +4,10 @@
  */
 
 import { Game } from '@/core/Game';
+import { Board } from '@/core/Board';
+import { Rules } from '@/core/Rules';
 import { Evaluator } from '@/ai/minimax/Evaluator';
-import { Move, GameState, PlayerType, ValidMove } from '@/core/types';
+import { Move, GameState, PlayerType, ValidMove, PieceType } from '@/core/types';
 
 export enum MoveQuality {
   BRILLIANT = 'brilliant',
@@ -91,7 +93,8 @@ export class MoveAnalyzer {
   }
 
   /**
-   * Evaluate a single move
+   * Evaluate a single move using a short minimax lookahead so the opponent's
+   * best response is considered (prevents suggesting moves that get captured).
    */
   private static evaluateMove(
     gameState: GameState,
@@ -101,8 +104,54 @@ export class MoveAnalyzer {
     const game = new Game();
     game.loadState(gameState);
     game.makeMove(move);
-    const newState = game.getState();
-    return Evaluator.evaluate(newState, playerType);
+    const afterState = game.getState();
+
+    // Depth-2 lookahead: evaluate from the opponent's perspective, then negate.
+    // This catches immediate punishments like "place goat → tiger captures it".
+    return this.minimaxEval(afterState, 2, playerType);
+  }
+
+  /**
+   * Simple minimax (no alpha-beta) for hint evaluation.
+   * Kept shallow (depth 2-3) so hints are fast.
+   */
+  private static minimaxEval(
+    state: GameState,
+    depth: number,
+    forPlayer: PlayerType
+  ): number {
+    if (depth === 0) {
+      return Evaluator.evaluate(state, forPlayer);
+    }
+
+    const game = new Game();
+    game.loadState(state);
+
+    if (game.isGameOver()) {
+      return Evaluator.evaluate(state, forPlayer);
+    }
+
+    const validMoves = game.getValidMoves();
+    if (validMoves.length === 0) {
+      return Evaluator.evaluate(state, forPlayer);
+    }
+
+    const isMaximizing = state.currentPlayer === forPlayer;
+    let bestEval = isMaximizing ? -Infinity : Infinity;
+
+    for (const vm of validMoves) {
+      const child = game.clone();
+      child.makeMove(vm.move);
+      const childEval = this.minimaxEval(child.getState(), depth - 1, forPlayer);
+
+      if (isMaximizing) {
+        bestEval = Math.max(bestEval, childEval);
+      } else {
+        bestEval = Math.min(bestEval, childEval);
+      }
+    }
+
+    return bestEval;
   }
 
   /**
@@ -172,7 +221,7 @@ export class MoveAnalyzer {
 
     if (bestMove.from === null) {
       // Placement move
-      hint += `Place a goat at (${bestMove.to.row}, ${bestMove.to.col})`;
+      hint += `Place at (${bestMove.to.row}, ${bestMove.to.col})`;
     } else if (bestMove.captured) {
       // Capture move
       hint += `Move from (${bestMove.from.row}, ${bestMove.from.col}) to (${bestMove.to.row}, ${bestMove.to.col}) to capture a goat!`;
@@ -181,14 +230,19 @@ export class MoveAnalyzer {
       hint += `Move from (${bestMove.from.row}, ${bestMove.from.col}) to (${bestMove.to.row}, ${bestMove.to.col})`;
     }
 
-    // Add evaluation context
-    if (evaluation > 1000) {
+    // Add evaluation context (relative to material baseline)
+    const baseline = playerType === PlayerType.GOAT
+      ? (20 - gameState.goatsCaptured) * 50
+      : gameState.goatsCaptured * 1000;
+    const relEval = evaluation - baseline;
+
+    if (relEval > 1000) {
       hint += ' - This leads to a winning position!';
-    } else if (evaluation > 500) {
+    } else if (relEval > 300) {
       hint += ' - This gives you a strong advantage.';
-    } else if (evaluation > 0) {
+    } else if (relEval > -100) {
       hint += ' - This maintains your position.';
-    } else if (evaluation > -500) {
+    } else if (relEval > -500) {
       hint += ' - This minimizes your disadvantage.';
     } else {
       hint += ' - This is the best defense available.';
@@ -206,14 +260,22 @@ export class MoveAnalyzer {
   ): string {
     const evaluation = Evaluator.evaluate(gameState, playerType);
 
+    // Baseline: evaluate the starting position for this player so advice is
+    // relative to "neutral". Without this, the raw goat material score (20×50 = 1000)
+    // would immediately trigger "You're winning" at game start.
+    const baseline = playerType === PlayerType.GOAT
+      ? (20 - gameState.goatsCaptured) * 50  // GOAT_ALIVE weight × living goats
+      : gameState.goatsCaptured * 1000;        // GOAT_CAPTURED weight × captures
+    const relativeEval = evaluation - baseline;
+
     if (playerType === PlayerType.TIGER) {
       if (gameState.goatsCaptured >= 4) {
         return '🎯 One more capture to win! Focus on hunting the remaining goats.';
       } else if (gameState.goatsCaptured >= 3) {
         return '💪 You\'re close! Keep pressuring the goats.';
-      } else if (evaluation > 500) {
+      } else if (relativeEval > 500) {
         return '✓ You\'re winning. Maintain pressure and create capture opportunities.';
-      } else if (evaluation < -500) {
+      } else if (relativeEval < -500) {
         return '⚠️ You\'re losing. Try to avoid getting trapped while looking for captures.';
       } else {
         return '→ Control the center and create threats. Force goats into vulnerable positions.';
@@ -224,9 +286,9 @@ export class MoveAnalyzer {
         return '⚠️ Critical! One more capture loses the game. Play carefully!';
       } else if (gameState.goatsCaptured >= 3) {
         return '😰 Under pressure. Focus on blocking tigers, not risky moves.';
-      } else if (evaluation > 500) {
+      } else if (relativeEval > 500) {
         return '✓ You\'re winning. Tighten the trap around the tigers.';
-      } else if (evaluation < -500) {
+      } else if (relativeEval < -500) {
         return '⚠️ Tigers are dominating. Regroup and build defensive walls.';
       } else {
         return '→ Build formations and trap tigers. Work together to restrict their movement.';

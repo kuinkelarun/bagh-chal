@@ -191,55 +191,59 @@ const Piece: React.FC<PieceProps> = ({ type, x, y, onClick }) => {
         opacity="0.12"
       />
 
-      {/* Goat head/body */}
+      {/* Goat head/body — slightly taller face for goat proportions */}
       <ellipse
         cx="0"
         cy="0"
-        rx={size}
-        ry={size * 0.95}
+        rx={size * 0.9}
+        ry={size}
         fill={`url(#goat-gradient-${x}-${y})`}
         stroke="#8B7355"
         strokeWidth="2.5"
         filter={`url(#goat-shadow-${x}-${y})`}
       />
 
-      {/* Ears */}
+      {/* Ears — long and droopy, typical goat ears */}
       <g>
         {/* Left ear */}
         <ellipse
-          cx="-16"
-          cy="-16"
-          rx="6"
-          ry="10"
-          fill="#F5F5F5"
+          cx="-17"
+          cy="-6"
+          rx="5"
+          ry="11"
+          fill="#F0EDE8"
           stroke="#8B7355"
           strokeWidth="1.5"
+          transform="rotate(25, -17, -6)"
         />
         <ellipse
-          cx="-16"
-          cy="-15"
-          rx="3"
-          ry="6"
-          fill="#FFB6C1"
-          opacity="0.6"
+          cx="-17"
+          cy="-5"
+          rx="2.5"
+          ry="7"
+          fill="#D4C4B0"
+          opacity="0.5"
+          transform="rotate(25, -17, -5)"
         />
         {/* Right ear */}
         <ellipse
-          cx="16"
-          cy="-16"
-          rx="6"
-          ry="10"
-          fill="#F5F5F5"
+          cx="17"
+          cy="-6"
+          rx="5"
+          ry="11"
+          fill="#F0EDE8"
           stroke="#8B7355"
           strokeWidth="1.5"
+          transform="rotate(-25, 17, -6)"
         />
         <ellipse
-          cx="16"
-          cy="-15"
-          rx="3"
-          ry="6"
-          fill="#FFB6C1"
-          opacity="0.6"
+          cx="17"
+          cy="-5"
+          rx="2.5"
+          ry="7"
+          fill="#D4C4B0"
+          opacity="0.5"
+          transform="rotate(-25, 17, -5)"
         />
       </g>
 
@@ -247,85 +251,92 @@ const Piece: React.FC<PieceProps> = ({ type, x, y, onClick }) => {
       <g stroke="#6B5D54" strokeWidth="2.5" fill="none" strokeLinecap="round">
         {/* Left horn */}
         <path
-          d="M -14 -20 Q -18 -26, -15 -28 Q -13 -29, -11 -26"
+          d="M -10 -18 Q -16 -28, -12 -32 Q -10 -33, -8 -28"
           fill="#8B7355"
           stroke="#6B5D54"
           strokeWidth="2"
         />
-        <path d="M -14 -22 Q -16 -24, -14 -26" stroke="#D4C4B0" strokeWidth="1" />
+        <path d="M -10 -22 Q -13 -26, -11 -30" stroke="#D4C4B0" strokeWidth="1" />
 
         {/* Right horn */}
         <path
-          d="M 14 -20 Q 18 -26, 15 -28 Q 13 -29, 11 -26"
+          d="M 10 -18 Q 16 -28, 12 -32 Q 10 -33, 8 -28"
           fill="#8B7355"
           stroke="#6B5D54"
           strokeWidth="2"
         />
-        <path d="M 14 -22 Q 16 -24, 14 -26" stroke="#D4C4B0" strokeWidth="1" />
+        <path d="M 10 -22 Q 13 -26, 11 -30" stroke="#D4C4B0" strokeWidth="1" />
       </g>
 
-      {/* Snout/mouth area */}
+      {/* Muzzle — subtle, lighter area */}
       <ellipse
         cx="0"
-        cy="6"
-        rx="14"
-        ry="10"
-        fill="#E8E8E8"
-        stroke="#8B7355"
-        strokeWidth="1"
+        cy="7"
+        rx="10"
+        ry="8"
+        fill="#F0EDE8"
+        stroke="#C4B8A8"
+        strokeWidth="0.8"
       />
 
-      {/* Eyes */}
+      {/* Eyes — horizontal rectangular pupils like a real goat */}
       <g>
         {/* Left eye */}
-        <ellipse cx="-10" cy="-3" rx="4.5" ry="5.5" fill="#FFF" />
-        <ellipse cx="-10" cy="-2" rx="3" ry="4" fill="#3C2415" />
-        <rect x="-11" y="-4" width="2" height="6" rx="1" fill="#000" />
-        <ellipse cx="-9" cy="-4" rx="1.5" ry="2" fill="#FFF" opacity="0.8" />
+        <ellipse cx="-8" cy="-5" rx="4" ry="5" fill="#FFF" />
+        <ellipse cx="-8" cy="-4" rx="3" ry="3.5" fill="#C8A84E" />
+        <rect x="-11" y="-5" width="6" height="2.5" rx="1" fill="#000" />
+        <ellipse cx="-7" cy="-6" rx="1.2" ry="1.5" fill="#FFF" opacity="0.7" />
 
         {/* Right eye */}
-        <ellipse cx="10" cy="-3" rx="4.5" ry="5.5" fill="#FFF" />
-        <ellipse cx="10" cy="-2" rx="3" ry="4" fill="#3C2415" />
-        <rect x="9" y="-4" width="2" height="6" rx="1" fill="#000" />
-        <ellipse cx="11" cy="-4" rx="1.5" ry="2" fill="#FFF" opacity="0.8" />
+        <ellipse cx="8" cy="-5" rx="4" ry="5" fill="#FFF" />
+        <ellipse cx="8" cy="-4" rx="3" ry="3.5" fill="#C8A84E" />
+        <rect x="5" y="-5" width="6" height="2.5" rx="1" fill="#000" />
+        <ellipse cx="9" cy="-6" rx="1.2" ry="1.5" fill="#FFF" opacity="0.7" />
       </g>
 
-      {/* Nose */}
+      {/* Nose — small and subtle */}
       <ellipse
         cx="0"
-        cy="6"
-        rx="4"
-        ry="3"
-        fill="#3C2415"
+        cy="5"
+        rx="3"
+        ry="2"
+        fill="#6B5D54"
       />
       <ellipse
-        cx="-1"
-        cy="5"
-        rx="1.5"
-        ry="1"
+        cx="-0.5"
+        cy="4.5"
+        rx="1"
+        ry="0.7"
         fill="#FFF"
-        opacity="0.5"
+        opacity="0.4"
       />
 
-      {/* Nostrils */}
-      <ellipse cx="-1.5" cy="6" rx="1" ry="1.5" fill="#2C1810" />
-      <ellipse cx="1.5" cy="6" rx="1" ry="1.5" fill="#2C1810" />
+      {/* Nostrils — small, not prominent */}
+      <ellipse cx="-1.2" cy="5.5" rx="0.8" ry="1" fill="#3C2415" />
+      <ellipse cx="1.2" cy="5.5" rx="0.8" ry="1" fill="#3C2415" />
 
       {/* Mouth */}
       <path
-        d="M 0 8 Q -4 10, -6 9 M 0 8 Q 4 10, 6 9"
+        d="M 0 8 Q -3 10, -5 9 M 0 8 Q 3 10, 5 9"
         stroke="#8B7355"
-        strokeWidth="1.5"
+        strokeWidth="1.2"
         fill="none"
         strokeLinecap="round"
       />
 
+      {/* Goatee / beard */}
+      <g opacity="0.6">
+        <path d="M -2 12 Q -3 17, -1 19" stroke="#C4B8A8" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        <path d="M 0 13 Q 0 18, 0 20" stroke="#C4B8A8" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+        <path d="M 2 12 Q 3 17, 1 19" stroke="#C4B8A8" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      </g>
+
       {/* Fur texture (subtle) */}
-      <g opacity="0.15">
-        <path d="M -18 0 Q -16 2, -18 4" stroke="#8B7355" strokeWidth="1" fill="none" />
-        <path d="M 18 0 Q 16 2, 18 4" stroke="#8B7355" strokeWidth="1" fill="none" />
-        <path d="M -12 -12 Q -10 -10, -12 -8" stroke="#8B7355" strokeWidth="0.5" fill="none" />
-        <path d="M 12 -12 Q 10 -10, 12 -8" stroke="#8B7355" strokeWidth="0.5" fill="none" />
+      <g opacity="0.12">
+        <path d="M -16 -2 Q -14 0, -16 2" stroke="#8B7355" strokeWidth="1" fill="none" />
+        <path d="M 16 -2 Q 14 0, 16 2" stroke="#8B7355" strokeWidth="1" fill="none" />
+        <path d="M -10 -14 Q -8 -12, -10 -10" stroke="#8B7355" strokeWidth="0.5" fill="none" />
+        <path d="M 10 -14 Q 8 -12, 10 -10" stroke="#8B7355" strokeWidth="0.5" fill="none" />
       </g>
     </g>
     </g>

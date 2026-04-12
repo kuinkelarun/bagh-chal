@@ -531,7 +531,7 @@ const GameContainer: React.FC = () => {
           {gameState.status === GameStatus.IN_PROGRESS && gameMode !== 'human-vs-human' && (
             <MoveAnalysis
               gameState={gameState}
-              currentPlayer={gameState.currentPlayer}
+              currentPlayer={gameMode === 'human-vs-ai' ? PlayerType.GOAT : PlayerType.TIGER}
               isAITurn={isCurrentPlayerAI()}
             />
           )}
